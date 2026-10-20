@@ -1,0 +1,4 @@
+{"ticket_id": "g-1", "subject": "Urgent refund request", "body": "I was charged twice, need a refund", "expect": {"category": "billing", "priority": "high", "must_have_citation_prefix": "kb-billing"}, "_comment": "紧急退款→账单高优+引用"}
+{"ticket_id": "g-2", "subject": "Password reset", "body": "I cannot login and need a password reset", "expect": {"category": "technical", "priority": "high", "must_have_citation_prefix": "kb-tech"}, "_comment": "无法登录→技术高优+引用"}
+{"ticket_id": "g-3", "subject": "Delete my account", "body": "Please delete account permanently", "expect": {"category": "account", "priority": "medium", "must_have_citation_prefix": "kb-account"}, "_comment": "注销账号→账户中优+引用"}
+{"ticket_id": "g-4", "subject": "Hello", "body": "Just saying hi", "expect": {"category": "other", "priority": "low", "must_have_citation_prefix": null}, "_comment": "闲聊→其他低优、无强制引用"}
