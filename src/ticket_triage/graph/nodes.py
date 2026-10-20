@@ -5,14 +5,13 @@ from __future__ import annotations
 from ticket_triage.config import settings
 from ticket_triage.graph.state import TriageState
 from ticket_triage.llm import get_llm
-from ticket_triage.tools.kb import search_knowledge_base
-from ticket_triage.tools.tickets import get_ticket_history, seed_ticket, update_ticket_status
+from ticket_triage.tools import gateway
 
 
 def ingest_node(state: TriageState) -> dict:
     """入库工单。"""
     ticket = state["ticket"]
-    seed_ticket(ticket.ticket_id, ticket.subject, ticket.body)
+    gateway.seed_ticket(ticket.ticket_id, ticket.subject, ticket.body)
     return {"status": "ingested", "errors": [], "tool_retries": 0}
 
 
@@ -29,8 +28,8 @@ def enrich_node(state: TriageState) -> dict:
     classification = state.get("classification")
     query = f"{ticket.subject} {classification.category.value if classification else ''}"
     try:
-        hits = search_knowledge_base(query)
-        history = get_ticket_history(ticket.ticket_id)
+        hits = gateway.search_knowledge_base(query)
+        history = gateway.get_ticket_history(ticket.ticket_id)
         return {
             "kb_hits": hits,
             "history": history,
@@ -70,8 +69,8 @@ def finalize_node(state: TriageState) -> dict:
     approved = state.get("human_approved")
     draft = state.get("draft")
     if approved is False:
-        update_ticket_status(ticket.ticket_id, "escalated", note=state.get("human_edits"))
+        gateway.update_ticket_status(ticket.ticket_id, "escalated", note=state.get("human_edits"))
         return {"status": "escalated", "awaiting_human": False}
     body = state.get("human_edits") or (draft.body if draft else "")
-    update_ticket_status(ticket.ticket_id, "resolved", note=body[:200])
+    gateway.update_ticket_status(ticket.ticket_id, "resolved", note=body[:200])
     return {"status": "resolved", "awaiting_human": False}

@@ -27,7 +27,8 @@ P1 稳定（pytest 绿、HITL 可用）
 | `get_ticket_history` | `tools/tickets.py` | 否 |
 | `update_ticket_status` | `tools/tickets.py` | 是（需确认 / 白名单） |
 
-脚手架目录：[`mcp_server/`](../mcp_server/)。
+实现目录：[`mcp_server/`](../mcp_server/)，用法见 [`MCP.md`](MCP.md)。  
+**P2 状态：已实现**（`USE_MCP` + stdio Server + 共享 SQLite + 超时软降级）。
 
 ### 验收标准（P2 完成）
 

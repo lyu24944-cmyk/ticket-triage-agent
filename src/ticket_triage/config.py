@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     require_hitl: bool = True
     max_tool_retries: int = 2
+    # P2：是否通过 MCP 调用工具
+    use_mcp: bool = False
+    # MCP 工具调用超时（秒）
+    mcp_timeout_seconds: float = 5.0
+    # 启动 MCP 子进程的命令；空则用当前解释器 -m mcp_server
+    mcp_command: str | None = None
+    # 工单 SQLite 路径（Agent 与 MCP 共享）；空则用项目 .data/tickets.db
+    ticket_db_path: str | None = None
 
 
 settings = Settings()

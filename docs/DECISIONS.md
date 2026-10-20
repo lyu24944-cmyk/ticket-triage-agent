@@ -19,7 +19,7 @@
 | 编排 | LangGraph（显式状态） |
 | API | FastAPI + Pydantic |
 | 工具（P1） | 进程内类型化工具（模拟 KB + 工单库） |
-| 工具（P2） | 用 MCP Server 封装同一能力 |
+| 工具（P2） | MCP Server（stdio）+ `USE_MCP` 网关；工单用共享 SQLite |
 | 可观测性 | Langfuse（可选，环境变量开启）；始终有结构化日志 |
 | 评测（P3） | `evals/` 黄金 JSONL + 确定性打分 + 可选 LLM-as-judge |
 | 部署 | Docker + GitHub Actions CI |

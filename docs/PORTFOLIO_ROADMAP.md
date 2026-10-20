@@ -4,8 +4,8 @@
 
 | 编号 | 项目 | 本仓库状态 |
 |------|------|------------|
-| P1 | LangGraph 工单分流 + HITL + FastAPI | **已搭骨架并通过测试** |
-| P2 | KB/工单的 MCP 工具服务 | 脚手架 + 验收见 `P2_MCP_P3_EVALS.md` |
+| P1 | LangGraph 工单分流 + HITL + FastAPI | **已完成** |
+| P2 | KB/工单的 MCP 工具服务 | **已完成**（见 `docs/MCP.md`） |
 | P3 | 黄金评测 + CI 门禁 | 脚手架（`evals/`、`.github/workflows/evals.yml`） |
 | P4 | 带引用的 RAG 问答 Agent | 未开始（可另开包） |
 | P5 | 长任务异步 Agent + 追踪 | 未开始 |
