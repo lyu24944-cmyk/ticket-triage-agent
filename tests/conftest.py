@@ -11,5 +11,6 @@ from ticket_triage.config import settings
 def _isolate_ticket_db(tmp_path, monkeypatch):
     db = tmp_path / "tickets.db"
     monkeypatch.setattr(settings, "ticket_db_path", str(db))
+    monkeypatch.setattr(settings, "runtime_db_path", str(tmp_path / "runtime.db"))
     monkeypatch.setattr(settings, "use_mcp", False)
     yield

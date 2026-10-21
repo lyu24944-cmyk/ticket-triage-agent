@@ -8,7 +8,7 @@
 | P2 | KB/工单的 MCP 工具服务 | **已完成**（见 `docs/MCP.md`） |
 | P3 | 黄金评测 + CI 门禁 | **已完成**（含「不得伪造引用」回归） |
 | P4 | 带引用的 RAG 问答 Agent | 未开始（可另开包） |
-| P5 | 长任务异步 Agent + 追踪 | 未开始 |
+| P5 | 可恢复人审 + 节点追踪 | **已完成**（见 `docs/P5_RUNBOOK.md`） |
 | P6 | 垂直做深（工单域） | 与 P1–P3 同一产品线 |
 
 默认栈：Python 3.11+、LangGraph、FastAPI、MCP、Langfuse/LangSmith、Docker、GitHub Actions。

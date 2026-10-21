@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     mcp_command: str | None = None
     # 工单 SQLite 路径（Agent 与 MCP 共享）；空则用项目 .data/tickets.db
     ticket_db_path: str | None = None
+    # P5：暂停状态与节点追踪
+    runtime_db_path: str | None = None
+    trace_budget_ms: float = 2000.0
 
 
 settings = Settings()

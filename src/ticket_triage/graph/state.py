@@ -27,3 +27,4 @@ class TriageState(TypedDict, total=False):
     errors: Annotated[list[str], _merge_errors]
     tool_retries: int
     auto_approve: bool
+    trace_id: str

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from ticket_triage import __version__
 from ticket_triage.config import settings
-from ticket_triage.graph.workflow import resume_with_human, run_triage
+from ticket_triage.graph.workflow import read_trace, resume_with_human, run_triage
 from ticket_triage.models import HumanDecision, RunRequest, RunResult
 
 app = FastAPI(title=settings.app_name, version=__version__)
@@ -26,6 +26,12 @@ def create_run(req: RunRequest) -> RunResult:
 def human_decision(decision: HumanDecision) -> RunResult:
     """提交人工审核结果并继续流程。"""
     return resume_with_human(decision)
+
+
+@app.get("/traces/{trace_id}")
+def trace(trace_id: str) -> dict:
+    """查看一次运行各节点的耗时与状态。"""
+    return read_trace(trace_id)
 
 
 def run() -> None:
