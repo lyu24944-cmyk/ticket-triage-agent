@@ -10,9 +10,33 @@
 
 ## 架构
 
+```mermaid
+flowchart TD
+  client[HTTP 客户端] --> api[FastAPI]
+  api --> ingest
+  ingest --> classify
+  classify --> enrich
+  enrich -->|失败且未超过重试| enrich
+  enrich --> draft
+  draft --> hitl[hitl_gate]
+  hitl -->|awaiting_human| pause[(SQLite pending_runs)]
+  hitl -->|auto_approve| finalize
+  human[POST /runs/human] --> pause
+  human --> finalize
+  finalize --> done[resolved 或 escalated]
+  enrich --> tools{工具面}
+  finalize --> tools
+  tools -->|USE_MCP=false| local[进程内工具]
+  tools -->|USE_MCP=true| mcp[MCP stdio]
+  local --> store[(知识库与 tickets.db)]
+  mcp --> store
+  nodes[各节点] --> spans[(trace_spans)]
+  spans --> traces[GET /traces]
+```
+
 ```text
 START → ingest → classify → enrich ⇄ (重试) → draft → hitl_gate
-                                                         ├─ awaiting_human（暂停）
+                                                         ├─ awaiting_human（写入 SQLite 后暂停）
                                                          └─ finalize → END
 
 enrich / finalize 工具面：
@@ -50,6 +74,8 @@ curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -d "
 ```bash
 curl -X POST http://127.0.0.1:8000/runs/human -H "Content-Type: application/json" -d "{\"ticket_id\":\"t-1\",\"approved\":true}"
 ```
+
+停进程后再恢复的完整演示：`powershell -File .\scripts\demo_hitl.ps1`，记录见 [docs/DEMO.md](docs/DEMO.md)。
 
 ### 开启 MCP 工具面
 
