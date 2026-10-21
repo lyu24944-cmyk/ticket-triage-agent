@@ -17,7 +17,7 @@ _MODELS = {
     "Classification": Classification,
     "DraftReply": DraftReply,
 }
-_DEFAULT_DB = Path(__file__).resolve().parents[3] / ".data" / "runtime.db"
+_DEFAULT_DB = Path(__file__).resolve().parents[2] / ".data" / "runtime.db"
 
 
 def runtime_db_path() -> Path:
