@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from ticket_triage.config import settings
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
+
+logger = logging.getLogger("ticket_triage.llm")
 
 
 class StubLLM:
@@ -57,7 +61,17 @@ class StubLLM:
         return DraftReply(body=body, citations=citations, confidence=confidence)
 
 
-def get_llm() -> StubLLM:
-    """按配置返回 LLM；当前统一返回 stub，后续可按 provider 分支。"""
-    _ = settings.llm_provider
+def get_llm():
+    """llm_provider 为 anthropic / openai 且有 Key 时用真实模型起草，否则用 stub。"""
+    provider = (settings.llm_provider or "stub").lower()
+    if provider == "anthropic" and settings.anthropic_api_key:
+        from ticket_triage.llm.model import ModelLLM, anthropic_complete
+
+        return ModelLLM(anthropic_complete())
+    if provider == "openai" and settings.openai_api_key:
+        from ticket_triage.llm.model import ModelLLM, openai_complete
+
+        return ModelLLM(openai_complete())
+    if provider != "stub":
+        logger.warning("llm_provider=%s 缺少 API Key，改用 stub", provider)
     return StubLLM()

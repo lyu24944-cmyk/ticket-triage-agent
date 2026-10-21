@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ticket_triage.config import settings
 from ticket_triage.graph.state import TriageState
-from ticket_triage.llm import get_llm
+from ticket_triage.llm import StubLLM, get_llm
 from ticket_triage.tools import gateway
 
 
@@ -56,7 +56,12 @@ def draft_node(state: TriageState) -> dict:
     classification = state.get("classification")
     if classification is None:
         return {"errors": ["draft_without_classification"], "status": "failed"}
-    draft = llm.draft_reply(state["ticket"], classification, state.get("kb_hits") or [])
+    kb_hits = state.get("kb_hits") or []
+    try:
+        draft = llm.draft_reply(state["ticket"], classification, kb_hits)
+    except Exception as exc:  # noqa: BLE001 — 模型失败时退回 stub 草稿，仍进人审
+        draft = StubLLM().draft_reply(state["ticket"], classification, kb_hits)
+        return {"draft": draft, "status": "drafted", "errors": [f"draft_model_failed: {exc}"]}
     return {"draft": draft, "status": "drafted"}
 
 

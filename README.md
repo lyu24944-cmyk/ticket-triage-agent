@@ -79,6 +79,18 @@ curl -X POST http://127.0.0.1:8000/runs/human -H "Content-Type: application/json
 
 停进程后再恢复的完整演示：`powershell -File .\scripts\demo_hitl.ps1`，记录见 [docs/DEMO.md](docs/DEMO.md)。
 
+### 用真实模型起草
+
+默认是 stub，测试和 CI 不需要 Key。设置后，草稿由模型撰写，分类仍用 stub：
+
+```powershell
+$env:LLM_PROVIDER="anthropic"   # 或 openai
+$env:ANTHROPIC_API_KEY="..."    # openai 则设 OPENAI_API_KEY，可选 OPENAI_BASE_URL
+python evals/run_evals.py
+```
+
+提示里只给本次检索到的文档。模型返回的引用编号不在其中时会被删掉；没有检索结果时引用为空。模型这条路径上，任何一张工单退回 stub，评测都会失败；延迟只记录，不卡 2 秒预算。
+
 ### 开启 MCP 工具面
 
 ```powershell
@@ -106,6 +118,8 @@ python -m mcp_server
 | 失败 | 行为 |
 |------|------|
 | 知识库 / 工具报错 / MCP 超时 / 问答服务连不上 | 最多重试 `max_tool_retries` 次，然后无引用起草 |
+| 模型起草报错或输出不是 JSON | 退回 stub 草稿并记 `draft_model_failed`，仍进人审；评测里视为不通过 |
+| 模型写了检索结果以外的文档编号 | 该编号从引用里删掉 |
 | 低置信度草稿 | 默认仍进人审；人可改稿 |
 | 人审驳回 | 状态为 `escalated`，不会静默丢弃 |
 | 非法 status | MCP/处理器返回 `status_not_allowed` |

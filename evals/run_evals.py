@@ -20,11 +20,14 @@ from scorers import (  # noqa: E402
     score_nonempty_draft,
     score_priority,
 )
+from ticket_triage.config import settings  # noqa: E402
 from ticket_triage.graph.workflow import run_triage  # noqa: E402
+from ticket_triage.llm import ModelLLM, get_llm  # noqa: E402
 from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
 
 TOOL_VERSION = "p3-gateway"
-PROMPT_VERSION = "stub-v1"
+USES_MODEL = isinstance(get_llm(), ModelLLM)
+PROMPT_VERSION = f"{settings.llm_provider}-draft-v1" if USES_MODEL else "stub-v1"
 
 THRESHOLDS = {
     "category_accuracy": 0.85,
@@ -81,6 +84,10 @@ def main() -> int:
                 "citations": citations,
                 "category": result.classification.category.value,
                 "priority": result.classification.priority.value,
+                "draft_model_failed": any(
+                    item.startswith("draft_model_failed") for item in result.errors
+                ),
+                "errors": list(result.errors),
             }
         )
 
@@ -103,8 +110,13 @@ def main() -> int:
     for key, floor in THRESHOLDS.items():
         if metrics.get(key, 0) < floor:
             failed.append(f"{key}: {metrics.get(key)} < {floor}")
-    if metrics["p95_latency_ms"] >= 2000:
+    # 延迟预算只约束本地 stub；真实模型的耗时只记录在报告里
+    if not USES_MODEL and metrics["p95_latency_ms"] >= 2000:
         failed.append(f"p95_latency_ms: {metrics['p95_latency_ms']} >= 2000")
+    # 退回 stub 的草稿不能算作模型通过
+    fell_back = [c["ticket_id"] for c in case_results if c["draft_model_failed"]]
+    if USES_MODEL and fell_back:
+        failed.append(f"draft_model_failed: {', '.join(fell_back)}")
 
     if failed:
         print("评测门禁失败:", "; ".join(failed), file=sys.stderr)
