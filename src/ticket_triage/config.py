@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # P5：暂停状态与节点追踪
     runtime_db_path: str | None = None
     trace_budget_ms: float = 2000.0
+    # P6：设置后，知识库检索改调 citation-rag-agent，例如 http://127.0.0.1:8001
+    rag_base_url: str | None = None
+    rag_timeout_seconds: float = 10.0
 
 
 settings = Settings()

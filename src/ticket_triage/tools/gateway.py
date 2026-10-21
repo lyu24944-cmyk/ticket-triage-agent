@@ -14,6 +14,10 @@ def search_knowledge_base(query: str, limit: int = 3) -> list[dict[str, str]]:
         from ticket_triage.tools.mcp_gateway import search_knowledge_base_mcp
 
         return search_knowledge_base_mcp(query, limit=limit)
+    if settings.rag_base_url:
+        from ticket_triage.tools.rag_client import search_knowledge_base as search_via_rag
+
+        return search_via_rag(query, limit=limit)
     return kb_mod.search_knowledge_base(query, limit=limit)
 
 

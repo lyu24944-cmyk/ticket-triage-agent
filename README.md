@@ -7,6 +7,7 @@
 - P2/P3 验收：见 [docs/P2_MCP_P3_EVALS.md](docs/P2_MCP_P3_EVALS.md)
 - 第一周清单：见 [docs/WEEK1_CHECKLIST.md](docs/WEEK1_CHECKLIST.md)
 - 作品集路线：见 [docs/PORTFOLIO_ROADMAP.md](docs/PORTFOLIO_ROADMAP.md)
+- P6 检索改调问答服务：见 [docs/P6.md](docs/P6.md)
 
 ## 架构
 
@@ -40,8 +41,9 @@ START → ingest → classify → enrich ⇄ (重试) → draft → hitl_gate
                                                          └─ finalize → END
 
 enrich / finalize 工具面：
-  USE_MCP=false → 进程内工具
-  USE_MCP=true  → MCP stdio 客户端 → python -m mcp_server
+  未设置 RAG_BASE_URL、USE_MCP=false → 进程内关键词工具
+  RAG_BASE_URL=http://127.0.0.1:8001 → 知识库检索改调 citation-rag-agent
+  USE_MCP=true → MCP stdio 客户端 → python -m mcp_server
 ```
 
 | 节点 | 职责 |
@@ -103,7 +105,7 @@ python -m mcp_server
 
 | 失败 | 行为 |
 |------|------|
-| 知识库 / 工具报错 / MCP 超时 | 最多重试 `max_tool_retries` 次，然后无引用起草 |
+| 知识库 / 工具报错 / MCP 超时 / 问答服务连不上 | 最多重试 `max_tool_retries` 次，然后无引用起草 |
 | 低置信度草稿 | 默认仍进人审；人可改稿 |
 | 人审驳回 | 状态为 `escalated`，不会静默丢弃 |
 | 非法 status | MCP/处理器返回 `status_not_allowed` |
@@ -111,7 +113,7 @@ python -m mcp_server
 
 ## 简历话术模板
 
-> 用 LangGraph 搭建工单分流 Agent：类型化工具经 MCP 暴露（3 工具、写操作白名单）、HITL 审批、工具超时软降级；FastAPI 暴露 run API；共享 SQLite 供 Agent/MCP 子进程一致读写；黄金集评测 CI 门禁。
+> 用 LangGraph 搭建工单分流 Agent：类型化工具经 MCP 暴露（3 工具、写操作白名单）、HITL 审批、工具超时软降级；知识库检索可改调带引用的问答服务，对不上文档时不编造引用；FastAPI 暴露 run API；黄金集评测 CI 门禁。
 
 ## 目录结构
 
@@ -129,3 +131,4 @@ docs/                  # 中文文档
 2. **P2** — MCP 工具服务 + `USE_MCP`（本阶段）
 3. **P3** — 黄金 JSONL + CI 门禁（含不得伪造引用）
 4. **P5** — 人审状态落 SQLite，重启可恢复；`GET /traces/{trace_id}` 看节点耗时
+5. **P6** — 设置 `RAG_BASE_URL` 后，知识库检索改调 citation-rag-agent（已完成，见 `docs/P6.md`）
