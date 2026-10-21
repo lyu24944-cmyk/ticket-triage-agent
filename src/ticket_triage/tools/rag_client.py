@@ -7,19 +7,21 @@ import httpx
 from ticket_triage.config import settings
 from ticket_triage.tools.kb import KB_ARTICLES
 
-# 句子嵌入对英文工单更稳。关键词检索仍用 kb.py 里的中文原文。
+# 英文句必须是中文原文的直译。模型会把摘录当作政策引用，多出的说法会被写进回复。
 _RAG_BODIES: dict[str, str] = {
     "kb-billing-refund": (
         "未使用订阅可在 14 天内退款。回复时请提及政策编号 REF-14。 "
-        "Refund an unused subscription within 14 days, including duplicate charges."
+        "Unused subscriptions can be refunded within 14 days. "
+        "Mention policy number REF-14 in the reply."
     ),
     "kb-tech-reset": (
         "用户可通过 /settings/security 重置密码。切勿在对话中索要当前密码。 "
-        "Reset your password from settings. Do not ask for the current password."
+        "Users can reset their password at /settings/security. "
+        "Never ask for the current password in the conversation."
     ),
     "kb-account-delete": (
         "注销需邮件确认，并有 7 天冷静期。 "
-        "Delete account requests need email confirmation and a 7 day cooling-off period."
+        "Account deletion requires email confirmation and has a 7-day cooling-off period."
     ),
 }
 
@@ -76,8 +78,12 @@ def search_knowledge_base(
         payload = response.json()
         if payload.get("abstained"):
             return []
+        # 问答服务的库里可能还有别的语料，只接收工单知识库自己的文档
+        known = {article["id"] for article in KB_ARTICLES}
         hits: list[dict[str, str]] = []
         for item in payload.get("citations") or []:
+            if str(item.get("doc_id")) not in known:
+                continue
             hits.append(
                 {
                     "id": str(item["doc_id"]),

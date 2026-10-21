@@ -16,10 +16,12 @@ def score_priority(actual: str, expected: str) -> float:
 
 
 def score_citation(citations: list[str], prefix: str | None) -> float | None:
-    """应命中 KB 时是否带正确引用前缀；无期望前缀时不计入该指标。"""
+    """应命中 KB 时，引用非空且每一条都带期望前缀；无期望前缀时不计入该指标。"""
     if not prefix:
         return None
-    return 1.0 if any(c.startswith(prefix) for c in citations) else 0.0
+    if not citations:
+        return 0.0
+    return 1.0 if all(c.startswith(prefix) for c in citations) else 0.0
 
 
 def score_no_invented_citation(citations: list[str], forbid: bool) -> float | None:

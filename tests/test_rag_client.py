@@ -48,6 +48,30 @@ def test_refund_maps_doc_id_and_excerpt() -> None:
     assert seen.count("/ask") == 1
 
 
+def test_foreign_documents_are_dropped() -> None:
+    clear_seed_cache()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/documents":
+            return httpx.Response(200, json={"doc_id": "x", "chunk_count": 1})
+        return httpx.Response(
+            200,
+            json={
+                "question": "q",
+                "answer": "a",
+                "abstained": False,
+                "citations": [
+                    {"chunk_id": "doc-refund#c0", "doc_id": "doc-refund", "title": "t", "excerpt": "e", "score": 0.7},
+                    {"chunk_id": "kb-billing-refund#c0", "doc_id": "kb-billing-refund", "title": "退款政策", "excerpt": "14 天", "score": 0.68},
+                ],
+            },
+        )
+
+    client = httpx.Client(transport=_transport(handler), base_url="http://rag.test")
+    hits = search_knowledge_base("refund", client=client)
+    assert [hit["id"] for hit in hits] == ["kb-billing-refund"]
+
+
 def test_abstain_returns_no_citations() -> None:
     clear_seed_cache()
 
