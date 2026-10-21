@@ -16,25 +16,32 @@ from scorers import (  # noqa: E402
     aggregate,
     score_category,
     score_citation,
+    score_no_invented_citation,
     score_nonempty_draft,
     score_priority,
 )
 from ticket_triage.graph.workflow import run_triage  # noqa: E402
 from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
 
+TOOL_VERSION = "p3-gateway"
+PROMPT_VERSION = "stub-v1"
+
 THRESHOLDS = {
     "category_accuracy": 0.85,
     "priority_accuracy": 0.75,
     "citation_present_when_kb_hit": 0.90,
+    "no_invented_citations": 1.0,
     "no_empty_draft": 1.0,
 }
 
 GOLDEN = Path(__file__).parent / "golden" / "tickets.jsonl"
+REPORT_PATH = Path(__file__).parent / "last_report.json"
 
 
 def main() -> int:
     rows = []
     latencies = []
+    case_results = []
     for line in GOLDEN.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -53,32 +60,43 @@ def main() -> int:
         )
         latencies.append((time.perf_counter() - t0) * 1000)
         assert result.classification and result.draft
-        rows.append(
+        citations = list(result.draft.citations)
+        row = {
+            "category": score_category(
+                result.classification.category.value, expect["category"]
+            ),
+            "priority": score_priority(
+                result.classification.priority.value, expect["priority"]
+            ),
+            "citation": score_citation(citations, expect.get("must_have_citation_prefix")),
+            "no_invented": score_no_invented_citation(
+                citations, bool(expect.get("forbid_citations"))
+            ),
+            "draft": score_nonempty_draft(result.draft.body),
+        }
+        rows.append(row)
+        case_results.append(
             {
-                "category": score_category(
-                    result.classification.category.value, expect["category"]
-                ),
-                "priority": score_priority(
-                    result.classification.priority.value, expect["priority"]
-                ),
-                "citation": score_citation(
-                    result.draft.citations, expect.get("must_have_citation_prefix")
-                ),
-                "draft": score_nonempty_draft(result.draft.body),
+                "ticket_id": case["ticket_id"],
+                "citations": citations,
+                "category": result.classification.category.value,
+                "priority": result.classification.priority.value,
             }
         )
 
     metrics = aggregate(rows)
     latencies_sorted = sorted(latencies)
-    p95 = latencies_sorted[max(0, int(len(latencies_sorted) * 0.95) - 1)]
-    metrics["p95_latency_ms"] = p95
+    p95_index = max(0, int(len(latencies_sorted) * 0.95) - 1)
+    metrics["p95_latency_ms"] = latencies_sorted[p95_index]
 
     report = {
-        "tool_version": "p1-inprocess",
-        "prompt_version": "stub-v1",
+        "tool_version": TOOL_VERSION,
+        "prompt_version": PROMPT_VERSION,
         "metrics": metrics,
         "thresholds": THRESHOLDS,
+        "cases": case_results,
     }
+    REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
     failed = []

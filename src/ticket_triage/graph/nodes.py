@@ -26,7 +26,11 @@ def enrich_node(state: TriageState) -> dict:
     """检索知识库与历史；失败时记录错误供重试。"""
     ticket = state["ticket"]
     classification = state.get("classification")
-    query = f"{ticket.subject} {classification.category.value if classification else ''}"
+    # 主题 + 正文一起检索，避免正文里的「退款/refund」被丢掉
+    query = (
+        f"{ticket.subject} {ticket.body} "
+        f"{classification.category.value if classification else ''}"
+    )
     try:
         hits = gateway.search_knowledge_base(query)
         history = gateway.get_ticket_history(ticket.ticket_id)

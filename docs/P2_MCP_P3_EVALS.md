@@ -64,23 +64,26 @@ P1 稳定（pytest 绿、HITL 可用）
 | `category_accuracy` | ≥ 0.85 |
 | `priority_accuracy` | ≥ 0.75 |
 | `citation_present_when_kb_hit` | ≥ 0.90（应命中 KB 时） |
+| `no_invented_citations` | 100%（无关/空检索不得伪造引用） |
 | `no_empty_draft` | 100% |
 | `p95_latency_ms`（本地 stub） | < 2000 |
 
 后续可选：语气的 LLM-as-judge（校准前不做合并阻断）。
 
+**P3 状态：已实现。** 黄金集含中文退款引用（g-6）与闲聊/无关文本禁止伪造引用（g-4、g-5）；空 query 回归在 `tests/test_regression.py`。报告写入 `evals/last_report.json`（不入库），并带 `tool_version` / `prompt_version`。CI：`.github/workflows/evals.yml`。
+
 ### 验收标准（P3 完成）
 
 1. `python evals/run_evals.py` 打印各指标，并以 0/1 退出。  
 2. CI 在 pull_request 上运行；红灯阻止合并。  
-3. 至少 1 条来自已知 bug 的**回归用例**（例如空 query 不得伪造引用）。  
-4. 本文「如何决定发版/不发版」小节写清规则。  
+3. 至少 1 条来自已知 bug 的**回归用例**（空 query / 无关文本不得伪造引用）。  
+4. 本文「发版 / 不发版」小节写清规则。  
 5. 评测报告 JSON 中记录 prompt/工具版本号。
 
 ### 发版 / 不发版
 
 - **发版**：所有确定性门禁绿灯；无新增高危失败模式。  
-- **不发版**：相对 main，`category_accuracy` 下降超过 5 个百分点，或任意 `no_empty_draft` 失败。  
+- **不发版**：相对 main，`category_accuracy` 下降超过 5 个百分点，或任意 `no_empty_draft` / `no_invented_citations` 失败。  
 - 软性 judge 失败 → 开 issue，在与人标一致率达标前不阻断合并。
 
 ---

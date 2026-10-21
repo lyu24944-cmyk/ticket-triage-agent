@@ -21,22 +21,22 @@ KB_ARTICLES: list[dict[str, str]] = [
 ]
 
 
+# 整句包含匹配，避免中文无空格时被拆词漏检；空查询不得返回文章
+_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "kb-billing-refund": ("refund", "billing", "charge", "invoice", "退款", "扣款", "账单"),
+    "kb-tech-reset": ("password", "login", "密码", "登录"),
+    "kb-account-delete": ("delete account", "account deletion", "注销", "关闭账号"),
+}
+
+
 def search_knowledge_base(query: str, limit: int = 3) -> list[dict[str, str]]:
-    """按关键词匹配返回模拟 KB 命中；空查询返回空列表。"""
+    """按关键词匹配返回模拟 KB 命中；空查询或无关文本返回空列表，不伪造引用。"""
     q = (query or "").lower().strip()
     if not q:
         return []
     scored: list[tuple[int, dict[str, str]]] = []
     for article in KB_ARTICLES:
-        hay = f"{article['title']} {article['body']}".lower()
-        # 同时匹配英文关键词，兼容现有黄金集用例
-        en_hay = {
-            "kb-billing-refund": "refund policy unused subscriptions REF-14",
-            "kb-tech-reset": "password reset settings security",
-            "kb-account-delete": "account deletion email confirmation",
-        }.get(article["id"], "")
-        hay = f"{hay} {en_hay}"
-        score = sum(1 for token in q.split() if token in hay)
+        score = sum(1 for kw in _KEYWORDS.get(article["id"], ()) if kw.lower() in q)
         if score:
             scored.append((score, article))
     scored.sort(key=lambda x: x[0], reverse=True)
