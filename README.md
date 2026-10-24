@@ -49,7 +49,7 @@ enrich / finalize 工具面：
 | 节点 | 职责 |
 |------|------|
 | `ingest` | 写入共享 SQLite 工单库 |
-| `classify` | 优先级 + 类别（默认 stub LLM） |
+| `classify` | 优先级 + 类别（有 Key 时由模型判断，失败退回关键词） |
 | `enrich` | 知识库检索 + 工单历史；失败可软降级重试 |
 | `draft` | 回复草稿 + 引用 |
 | `hitl_gate` | 除非 `auto_approve`，否则暂停等人审 |
@@ -79,9 +79,11 @@ curl -X POST http://127.0.0.1:8000/runs/human -H "Content-Type: application/json
 
 停进程后再恢复的完整演示：`powershell -File .\scripts\demo_hitl.ps1`，记录见 [docs/DEMO.md](docs/DEMO.md)。
 
-### 用真实模型起草
+审核台：启动 API 后打开 http://127.0.0.1:8000/review 。可以新建工单、看草稿和引用、通过或驳回，并看到各节点耗时。已处理工单列在左侧，可以重新送审，原来的结案或升级记录会留在历史里。
 
-默认是 stub，测试和 CI 不需要 Key。设置后，草稿由模型撰写，分类仍用 stub：
+### 用真实模型分类和起草
+
+默认是 stub，测试和 CI 不需要 Key。设置后，类别、优先级和草稿都由模型产生：
 
 ```powershell
 $env:LLM_PROVIDER="anthropic"   # 或 openai
@@ -89,7 +91,7 @@ $env:ANTHROPIC_API_KEY="..."    # openai 则设 OPENAI_API_KEY，可选 OPENAI_B
 python evals/run_evals.py
 ```
 
-提示里只给本次检索到的文档。模型返回的引用编号不在其中时会被删掉；没有检索结果时引用为空。模型这条路径上，任何一张工单退回 stub，评测都会失败；延迟只记录，不卡 2 秒预算。
+分类只能落在现有的四个类别和四个优先级里。不合规、超时或不是 JSON 时，退回关键词结果并记 `classify_model_failed`。起草时提示里只给本次检索到的文档。模型返回的引用编号不在其中时会被删掉；没有检索结果时引用为空。模型这条路径上，任何一张工单的分类或草稿退回 stub，评测都会失败；延迟只记录，不卡 2 秒预算。
 
 ### 开启 MCP 工具面
 
@@ -118,6 +120,7 @@ python -m mcp_server
 | 失败 | 行为 |
 |------|------|
 | 知识库 / 工具报错 / MCP 超时 / 问答服务连不上 | 最多重试 `max_tool_retries` 次，然后无引用起草 |
+| 模型分类报错、不是 JSON，或类别/优先级不在名单里 | 退回关键词分类并记 `classify_model_failed`，流程继续；评测里视为不通过 |
 | 模型起草报错或输出不是 JSON | 退回 stub 草稿并记 `draft_model_failed`，仍进人审；评测里视为不通过 |
 | 模型写了检索结果以外的文档编号 | 该编号从引用里删掉 |
 | 低置信度草稿 | 默认仍进人审；人可改稿 |

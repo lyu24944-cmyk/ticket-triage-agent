@@ -1,4 +1,4 @@
-"""真实模型起草。引用只能来自本次检索结果；分类仍用 stub，CI 不依赖外网。"""
+"""真实模型分类与起草。引用只能来自本次检索结果；CI 默认不走这条路径。"""
 
 from __future__ import annotations
 
@@ -9,10 +9,19 @@ from typing import Callable
 import httpx
 
 from ticket_triage.config import settings
-from ticket_triage.llm.stub import StubLLM
-from ticket_triage.models import Classification, DraftReply, TicketIn
+from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
 
 Complete = Callable[[str, str], str]
+
+CLASSIFY_SYSTEM = (
+    "你是客服工单分类助手。只根据工单主题和正文判断类别与优先级。"
+    "只输出一个 JSON 对象，格式为 "
+    '{"category": "billing", "priority": "low", "rationale": "一句话理由"}。'
+    "category 只能是 billing、technical、account、other 之一："
+    "账单、扣款、退款是 billing；登录、密码、故障是 technical；注销账号是 account；其余是 other。"
+    "priority 只能是 low、medium、high、critical 之一："
+    "紧急、无法使用、重复扣款用 high；一般咨询用 medium；问候和无关内容用 low。"
+)
 
 DRAFT_SYSTEM = (
     "你是客服工单的回复起草助手。只能依据用户消息里给出的知识库文档作答，"
@@ -27,6 +36,31 @@ _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-5",
     "openai": "gpt-4o-mini",
 }
+
+
+def _classify_prompt(ticket: TicketIn) -> str:
+    return f"工单主题：{ticket.subject}\n工单正文：{ticket.body}"
+
+
+def _classification_from_payload(payload: dict) -> Classification:
+    category_raw = str(payload.get("category") or "").strip().lower()
+    priority_raw = str(payload.get("priority") or "").strip().lower()
+    rationale = str(payload.get("rationale") or "").strip()
+    if category_raw not in Category._value2member_map_:
+        raise ValueError("model_output_bad_category")
+    if priority_raw not in Priority._value2member_map_:
+        raise ValueError("model_output_bad_priority")
+    if not rationale:
+        raise ValueError("model_output_empty_rationale")
+    category = Category(category_raw)
+    priority = Priority(priority_raw)
+    needs_escalation = priority in (Priority.high, Priority.critical) and category == Category.billing
+    return Classification(
+        priority=priority,
+        category=category,
+        rationale=rationale,
+        needs_escalation=needs_escalation,
+    )
 
 
 def _draft_prompt(
@@ -70,14 +104,14 @@ def keep_retrieved_citations(cited: list, kb_hits: list[dict[str, str]]) -> list
 
 
 class ModelLLM:
-    """complete(system, user) 返回模型原文；分类沿用 stub。"""
+    """complete(system, user) 返回模型原文。分类和起草都走模型。"""
 
     def __init__(self, complete: Complete) -> None:
         self._complete = complete
-        self._stub = StubLLM()
 
     def classify(self, ticket: TicketIn) -> Classification:
-        return self._stub.classify(ticket)
+        raw = self._complete(CLASSIFY_SYSTEM, _classify_prompt(ticket))
+        return _classification_from_payload(_parse_json(raw))
 
     def draft_reply(
         self,

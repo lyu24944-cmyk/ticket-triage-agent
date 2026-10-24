@@ -43,6 +43,16 @@ def _connect() -> sqlite3.Connection:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS closed_runs (
+            ticket_id TEXT PRIMARY KEY,
+            trace_id TEXT NOT NULL,
+            state_json TEXT NOT NULL,
+            closed_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS trace_spans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             trace_id TEXT NOT NULL,
@@ -117,6 +127,88 @@ def load_pending(ticket_id: str) -> dict[str, Any] | None:
         return None
     raw = json.loads(row[0])
     return _load_value(raw)
+
+
+def list_pending() -> list[dict[str, Any]]:
+    """列出待人审工单，供审核台展示。不含完整图状态。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT ticket_id, trace_id, state_json, updated_at
+                FROM pending_runs ORDER BY updated_at DESC
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+    items: list[dict[str, Any]] = []
+    for ticket_id, trace_id, state_json, updated_at in rows:
+        state = _load_value(json.loads(state_json))
+        ticket = state.get("ticket")
+        classification = state.get("classification")
+        draft = state.get("draft")
+        hits = []
+        for hit in state.get("kb_hits") or []:
+            if isinstance(hit, dict):
+                hits.append(
+                    {"id": hit.get("id"), "title": hit.get("title"), "body": hit.get("body")}
+                )
+        items.append(
+            {
+                "ticket_id": ticket_id,
+                "trace_id": trace_id,
+                "updated_at": updated_at,
+                "subject": getattr(ticket, "subject", "") or "",
+                "body": getattr(ticket, "body", "") or "",
+                "category": classification.category.value if classification else None,
+                "priority": classification.priority.value if classification else None,
+                "draft_body": draft.body if draft else "",
+                "citations": list(draft.citations) if draft else [],
+                "kb_hits": hits,
+            }
+        )
+    return items
+
+
+def archive_pending(ticket_id: str, trace_id: str, state: dict[str, Any]) -> None:
+    """结案前留下草稿，便于以后原样送回待审。"""
+    payload = json.dumps(_dump_value(dict(state)), ensure_ascii=False)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO closed_runs (ticket_id, trace_id, state_json, closed_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(ticket_id) DO UPDATE SET
+                    trace_id = excluded.trace_id,
+                    state_json = excluded.state_json,
+                    closed_at = excluded.closed_at
+                """,
+                (ticket_id, trace_id, payload, now),
+            )
+            conn.execute("DELETE FROM pending_runs WHERE ticket_id = ?", (ticket_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def load_closed(ticket_id: str) -> dict[str, Any] | None:
+    """读取结案时留档的图状态；没有则返回 None。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT state_json FROM closed_runs WHERE ticket_id = ?",
+                (ticket_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+    if not row:
+        return None
+    return _load_value(json.loads(row[0]))
 
 
 def delete_pending(ticket_id: str) -> None:

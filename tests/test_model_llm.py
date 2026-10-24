@@ -24,6 +24,59 @@ def _reply(body: str, citations: list[str]) -> str:
     return json.dumps({"body": body, "citations": citations}, ensure_ascii=False)
 
 
+def _classification(category: str, priority: str, rationale: str = "测试理由") -> str:
+    return json.dumps(
+        {"category": category, "priority": priority, "rationale": rationale},
+        ensure_ascii=False,
+    )
+
+
+def test_model_classification_uses_allowed_labels() -> None:
+    llm = ModelLLM(lambda system, user: _classification("technical", "low", "登录问题"))
+    result = llm.classify(TicketIn(ticket_id="m-c", subject="Hello", body="hi"))
+    assert result.category == Category.technical
+    assert result.priority == Priority.low
+    assert result.needs_escalation is False
+    assert result.rationale == "登录问题"
+
+
+def test_billing_high_still_marks_escalation() -> None:
+    llm = ModelLLM(lambda system, user: _classification("billing", "high"))
+    result = llm.classify(TICKET)
+    assert result.needs_escalation is True
+
+
+def test_unknown_category_is_rejected() -> None:
+    llm = ModelLLM(lambda system, user: _classification("shipping", "low"))
+    try:
+        llm.classify(TICKET)
+    except ValueError as exc:
+        assert "bad_category" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_classify_failure_falls_back_and_draft_still_uses_model(monkeypatch) -> None:
+    calls = {"n": 0}
+
+    def complete(system: str, user: str) -> str:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "not json"
+        return _reply("可在 14 天内退款。", ["kb-billing-refund"])
+
+    monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: ModelLLM(complete))
+    result = run_triage(
+        RunRequest(ticket=TICKET.model_copy(update={"ticket_id": "m-cls"}), auto_approve=True)
+    )
+    assert result.classification is not None
+    assert result.classification.category == Category.billing
+    assert result.classification.rationale == "stub 启发式分类"
+    assert any(item.startswith("classify_model_failed") for item in result.errors)
+    assert result.draft is not None
+    assert result.draft.body.startswith("可在 14 天内退款")
+
+
 def test_invented_citation_is_dropped() -> None:
     llm = ModelLLM(lambda system, user: _reply("可在 14 天内退款。", ["kb-billing-refund", "kb-fake"]))
     draft = llm.draft_reply(TICKET, BILLING, HITS)

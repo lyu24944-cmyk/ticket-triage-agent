@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "ticket-triage-agent"
-    # stub：无需 API Key；anthropic / openai 有 Key 时用真实模型起草，分类仍用 stub
+    # stub：无需 API Key；anthropic / openai 有 Key 时用真实模型分类和起草
     llm_provider: str = "stub"
     llm_model: str | None = None
     llm_timeout_seconds: float = 30.0

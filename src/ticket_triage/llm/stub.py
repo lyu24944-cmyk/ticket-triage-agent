@@ -62,7 +62,7 @@ class StubLLM:
 
 
 def get_llm():
-    """llm_provider 为 anthropic / openai 且有 Key 时用真实模型起草，否则用 stub。"""
+    """llm_provider 为 anthropic / openai 且有 Key 时用真实模型分类和起草，否则用 stub。"""
     provider = (settings.llm_provider or "stub").lower()
     if provider == "anthropic" and settings.anthropic_api_key:
         from ticket_triage.llm.model import ModelLLM, anthropic_complete

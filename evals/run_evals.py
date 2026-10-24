@@ -27,7 +27,7 @@ from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
 
 TOOL_VERSION = "p3-gateway"
 USES_MODEL = isinstance(get_llm(), ModelLLM)
-PROMPT_VERSION = f"{settings.llm_provider}-draft-v1" if USES_MODEL else "stub-v1"
+PROMPT_VERSION = f"{settings.llm_provider}-classify-draft-v1" if USES_MODEL else "stub-v1"
 
 THRESHOLDS = {
     "category_accuracy": 0.85,
@@ -87,6 +87,9 @@ def main() -> int:
                 "draft_model_failed": any(
                     item.startswith("draft_model_failed") for item in result.errors
                 ),
+                "classify_model_failed": any(
+                    item.startswith("classify_model_failed") for item in result.errors
+                ),
                 "errors": list(result.errors),
             }
         )
@@ -117,6 +120,9 @@ def main() -> int:
     fell_back = [c["ticket_id"] for c in case_results if c["draft_model_failed"]]
     if USES_MODEL and fell_back:
         failed.append(f"draft_model_failed: {', '.join(fell_back)}")
+    classify_fell_back = [c["ticket_id"] for c in case_results if c["classify_model_failed"]]
+    if USES_MODEL and classify_fell_back:
+        failed.append(f"classify_model_failed: {', '.join(classify_fell_back)}")
 
     if failed:
         print("评测门禁失败:", "; ".join(failed), file=sys.stderr)

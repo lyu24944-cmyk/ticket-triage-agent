@@ -19,8 +19,16 @@ from ticket_triage.graph.nodes import (
     ingest_node,
 )
 from ticket_triage.graph.state import TriageState
-from ticket_triage.models import HumanDecision, RunRequest, RunResult
-from ticket_triage.runtime import delete_pending, get_trace, load_pending, record_span, save_pending
+from ticket_triage.models import DraftReply, HumanDecision, RunRequest, RunResult, TicketIn
+from ticket_triage.runtime import (
+    archive_pending,
+    get_trace,
+    load_closed,
+    load_pending,
+    record_span,
+    save_pending,
+)
+from ticket_triage.tools import gateway
 
 logger = logging.getLogger("ticket_triage.trace")
 
@@ -159,8 +167,54 @@ def resume_with_human(decision: HumanDecision) -> RunResult:
     pending["awaiting_human"] = False
     out = _traced("finalize", finalize_node)(pending)
     pending.update(out)
-    delete_pending(decision.ticket_id)
+    archive_pending(decision.ticket_id, str(trace_id or ""), pending)
     return _result_from_state(decision.ticket_id, pending, trace_id)
+
+
+def reopen_ticket(ticket_id: str) -> RunResult:
+    """把已结案或已升级的工单放回待审，并在历史里追加一条，不覆盖旧记录。"""
+    if ticket_id in _PENDING or load_pending(ticket_id) is not None:
+        return RunResult(ticket_id=ticket_id, status="already_pending", errors=["already_pending"])
+    ticket = gateway.get_ticket(ticket_id)
+    if ticket is None:
+        return RunResult(ticket_id=ticket_id, status="not_found", errors=["ticket_not_found"])
+    if ticket["status"] not in {"resolved", "escalated"}:
+        return RunResult(ticket_id=ticket_id, status="not_closed", errors=["not_closed"])
+    state = load_closed(ticket_id)
+    if state is None:
+        note = ""
+        for item in reversed(ticket["history"]):
+            if item.get("status") in {"resolved", "escalated"} and item.get("note"):
+                note = str(item["note"])
+                break
+        state = {
+            "ticket": TicketIn(
+                ticket_id=ticket["ticket_id"],
+                subject=ticket["subject"],
+                body=ticket["body"],
+            ),
+            "draft": DraftReply(
+                body=note or "上次草稿未留档。请根据工单原文修改后通过，或再次驳回。",
+                citations=[],
+                confidence=0.0,
+            ),
+            "kb_hits": [],
+            "errors": [],
+            "tool_retries": 0,
+            "auto_approve": False,
+        }
+    else:
+        state = dict(state)
+    trace_id = str(state.get("trace_id") or uuid.uuid4())
+    state["trace_id"] = trace_id
+    state["awaiting_human"] = True
+    state["human_approved"] = None
+    state["human_edits"] = None
+    state["status"] = "awaiting_human"
+    _PENDING[ticket_id] = state
+    save_pending(ticket_id, trace_id, state)
+    gateway.update_ticket_status(ticket_id, "pending", "重新送审")
+    return _result_from_state(ticket_id, state, trace_id)
 
 
 def read_trace(trace_id: str) -> dict[str, Any]:

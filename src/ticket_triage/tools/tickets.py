@@ -38,6 +38,62 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _row_to_ticket(row: tuple) -> dict[str, Any]:
+    return {
+        "ticket_id": row[0],
+        "status": row[1],
+        "subject": row[2] or "",
+        "body": row[3] or "",
+        "history": list(json.loads(row[4])),
+    }
+
+
+def get_ticket(ticket_id: str) -> dict[str, Any] | None:
+    """读取一张工单及其全部状态历史。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT ticket_id, status, subject, body, history_json
+                FROM tickets WHERE ticket_id = ?
+                """,
+                (ticket_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+    if not row:
+        return None
+    return _row_to_ticket(row)
+
+
+def list_tickets(statuses: list[str] | None = None) -> list[dict[str, Any]]:
+    """列出工单。传入 statuses 时只返回这些状态。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if statuses:
+                marks = ",".join("?" for _ in statuses)
+                rows = conn.execute(
+                    f"""
+                    SELECT ticket_id, status, subject, body, history_json
+                    FROM tickets WHERE status IN ({marks})
+                    ORDER BY rowid DESC
+                    """,
+                    tuple(statuses),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT ticket_id, status, subject, body, history_json
+                    FROM tickets ORDER BY rowid DESC
+                    """
+                ).fetchall()
+        finally:
+            conn.close()
+    return [_row_to_ticket(row) for row in rows]
+
+
 def get_ticket_history(ticket_id: str) -> list[dict[str, Any]]:
     """返回工单状态历史。"""
     with _LOCK:

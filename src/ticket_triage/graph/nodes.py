@@ -16,9 +16,17 @@ def ingest_node(state: TriageState) -> dict:
 
 
 def classify_node(state: TriageState) -> dict:
-    """分类优先级与类别。"""
+    """分类优先级与类别。模型失败时退回关键词结果。"""
     llm = get_llm()
-    classification = llm.classify(state["ticket"])
+    try:
+        classification = llm.classify(state["ticket"])
+    except Exception as exc:  # noqa: BLE001 — 模型失败时退回 stub 分类，流程继续
+        classification = StubLLM().classify(state["ticket"])
+        return {
+            "classification": classification,
+            "status": "classified",
+            "errors": [f"classify_model_failed: {exc}"],
+        }
     return {"classification": classification, "status": "classified"}
 
 

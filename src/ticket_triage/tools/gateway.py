@@ -37,6 +37,16 @@ def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -
     return tickets_mod.update_ticket_status(ticket_id, status, note)
 
 
+def get_ticket(ticket_id: str) -> dict[str, Any] | None:
+    """读取工单。与入库一样直接读共享 SQLite。"""
+    return tickets_mod.get_ticket(ticket_id)
+
+
+def list_tickets(statuses: list[str] | None = None) -> list[dict[str, Any]]:
+    """列出工单。直接读共享 SQLite。"""
+    return tickets_mod.list_tickets(statuses)
+
+
 def seed_ticket(ticket_id: str, subject: str, body: str) -> None:
     # 入库始终写共享 SQLite，供 MCP 子进程读取
     tickets_mod.seed_ticket(ticket_id, subject, body)
