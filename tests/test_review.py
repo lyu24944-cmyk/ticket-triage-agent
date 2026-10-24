@@ -28,6 +28,7 @@ def test_pending_lists_ticket_until_approved() -> None:
     assert match[0]["category"] == "billing"
     assert "kb-billing" in "".join(match[0]["citations"])
     assert match[0]["draft_body"]
+    assert match[0]["errors"] == []
 
     page = client.get("/review")
     assert page.status_code == 200
@@ -88,3 +89,34 @@ def test_reopen_without_saved_draft_still_keeps_history() -> None:
     assert "上次草稿未留档" in reopened.json()["draft"]["body"]
     history = [item["status"] for item in get_ticket("old-1")["history"]]
     assert history == ["open", "escalated", "pending"]
+
+
+def test_pending_exposes_model_fallbacks(monkeypatch) -> None:
+    from ticket_triage.llm import ModelLLM
+
+    monkeypatch.setattr(
+        "ticket_triage.graph.nodes.get_llm",
+        lambda: ModelLLM(lambda _system, _user: "not json"),
+    )
+    client = TestClient(app)
+    created = client.post(
+        "/runs",
+        json={
+            "auto_approve": False,
+            "ticket": {
+                "ticket_id": "review-fallback",
+                "subject": "紧急退款",
+                "body": "我被重复扣款，需要退款",
+            },
+        },
+    )
+    assert created.status_code == 200
+    item = next(
+        row for row in client.get("/runs/pending").json()
+        if row["ticket_id"] == "review-fallback"
+    )
+    assert any(error.startswith("classify_model_failed") for error in item["errors"])
+    assert any(error.startswith("draft_model_failed") for error in item["errors"])
+    page = client.get("/review").text
+    assert "分类模型失败，当前分类由关键词规则生成。" in page
+    assert "草稿模型失败，当前草稿由 stub 生成。" in page

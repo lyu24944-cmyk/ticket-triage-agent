@@ -62,6 +62,8 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 pytest
+# 显式运行需要拉起 MCP stdio 子进程的集成测试：
+pytest -m integration
 uvicorn ticket_triage.api.main:app --reload --port 8000
 ```
 

@@ -23,6 +23,7 @@
     li.active { background: #eef6f1; }
     .meta { color: #5c6770; font-size: 13px; }
     .empty { color: #5c6770; }
+    .warning { color: #8a5a00; background: #fff7df; border-left: 3px solid #d89b19; padding: 8px 10px; }
     pre { white-space: pre-wrap; background: #f7f8fa; padding: 12px; border-radius: 6px; }
     .hit { border-left: 3px solid #1f7a4d; padding-left: 10px; margin: 8px 0; }
     .error { color: #a33b3b; }
@@ -155,9 +156,19 @@
       const hits = (item.kb_hits || []).map((hit) =>
         `<div class="hit"><strong>${esc(hit.title)}</strong> <span class="meta">${esc(hit.id)}</span><div>${esc(hit.body)}</div></div>`
       ).join("") || "<p class=\"empty\">没有引用。</p>";
+      const modelWarnings = (item.errors || []).filter((error) =>
+        error.startsWith("classify_model_failed") || error.startsWith("draft_model_failed")
+      ).map((error) => error.startsWith("classify_model_failed")
+        ? "分类模型失败，当前分类由关键词规则生成。"
+        : "草稿模型失败，当前草稿由 stub 生成。"
+      );
+      const warningMarkup = modelWarnings.length
+        ? `<p class="warning">${modelWarnings.map(esc).join("<br>")}</p>`
+        : "";
       detail.innerHTML = `
         <h2>${esc(item.subject)}</h2>
         <p class="meta">${esc(item.ticket_id)} · ${esc(item.category)} / ${esc(item.priority)}</p>
+        ${warningMarkup}
         <p>${esc(item.body)}</p>
         <h2>草稿</h2>
         <pre>${esc(item.draft_body)}</pre>

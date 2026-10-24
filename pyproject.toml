@@ -40,6 +40,7 @@ ticket_triage = ["api/*.html"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
 markers = [
   "integration: 需要拉起 MCP stdio 子进程的集成测试",
 ]

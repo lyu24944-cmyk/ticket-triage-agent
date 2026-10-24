@@ -166,6 +166,7 @@ def list_pending() -> list[dict[str, Any]]:
                 "draft_body": draft.body if draft else "",
                 "citations": list(draft.citations) if draft else [],
                 "kb_hits": hits,
+                "errors": list(state.get("errors") or []),
             }
         )
     return items
