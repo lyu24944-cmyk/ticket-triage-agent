@@ -177,8 +177,20 @@ def anthropic_complete(client: httpx.Client | None = None) -> Complete:
                 },
             )
             response.raise_for_status()
-            parts = response.json().get("content") or []
-            return "".join(part.get("text", "") for part in parts if part.get("type") == "text")
+            payload = response.json()
+            parts = payload.get("content") or []
+            text = "".join(part.get("text", "") for part in parts if part.get("type") == "text")
+            thinking = "".join(part.get("thinking", "") for part in parts if part.get("type") == "thinking")
+            _trace_generation(
+                _observation_name(system),
+                model,
+                system,
+                user,
+                text,
+                _anthropic_usage(payload),
+                thinking or None,
+            )
+            return text
         finally:
             if owns:
                 http.close()
@@ -209,9 +221,79 @@ def openai_complete(client: httpx.Client | None = None) -> Complete:
                 },
             )
             response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"] or ""
+            payload = response.json()
+            message = payload["choices"][0]["message"] or {}
+            text = message.get("content") or ""
+            thinking = message.get("reasoning_content") or message.get("reasoning")
+            _trace_generation(
+                _observation_name(system),
+                model,
+                system,
+                user,
+                text,
+                _openai_usage(payload),
+                thinking or None,
+            )
+            return text
         finally:
             if owns:
                 http.close()
 
     return complete
+
+
+def _observation_name(system: str) -> str:
+    if "工具调度" in system:
+        return "choose-tool"
+    if "分类" in system:
+        return "classify-ticket"
+    return "draft-reply"
+
+
+def _trace_generation(
+    name: str,
+    model: str,
+    system: str,
+    user: str,
+    output: str,
+    usage: dict[str, int] | None,
+    thinking: str | None = None,
+) -> None:
+    try:
+        from ticket_triage.observability import record_generation
+
+        record_generation(
+            name=name,
+            model=model,
+            system=system,
+            user=user,
+            output=output,
+            usage=usage,
+            metadata={"reasoning": thinking} if thinking else None,
+        )
+    except Exception:  # noqa: BLE001 — 追踪失败不能影响模型调用
+        return
+
+
+def _openai_usage(payload: dict) -> dict[str, int] | None:
+    raw = payload.get("usage") or {}
+    usage: dict[str, int] = {}
+    if "prompt_tokens" in raw:
+        usage["input"] = int(raw["prompt_tokens"])
+    if "completion_tokens" in raw:
+        usage["output"] = int(raw["completion_tokens"])
+    if "total_tokens" in raw:
+        usage["total"] = int(raw["total_tokens"])
+    return usage or None
+
+
+def _anthropic_usage(payload: dict) -> dict[str, int] | None:
+    raw = payload.get("usage") or {}
+    usage: dict[str, int] = {}
+    if "input_tokens" in raw:
+        usage["input"] = int(raw["input_tokens"])
+    if "output_tokens" in raw:
+        usage["output"] = int(raw["output_tokens"])
+    if usage:
+        usage["total"] = usage.get("input", 0) + usage.get("output", 0)
+    return usage or None

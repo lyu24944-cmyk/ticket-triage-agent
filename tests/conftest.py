@@ -15,4 +15,6 @@ def _isolate_ticket_db(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "use_mcp", False)
     monkeypatch.setattr(settings, "rag_base_url", None)
     monkeypatch.setattr(settings, "llm_provider", "stub")
+    monkeypatch.setattr(settings, "langfuse_public_key", None)
+    monkeypatch.setattr(settings, "langfuse_secret_key", None)
     yield

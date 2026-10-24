@@ -9,7 +9,12 @@ if (-not (Test-Path $python)) {
 }
 
 $ticketId = "demo-60s"
+$helloId = "demo-hello"
 $base = "http://127.0.0.1:8000"
+# 非空的 local 会覆盖 .env 里的远程地址，检索走仓库里的三篇关键词文档。
+# 去掉进程里的 LLM_PROVIDER，让 .env 决定用 stub 还是真实模型。
+if (Test-Path Env:LLM_PROVIDER) { Remove-Item Env:LLM_PROVIDER }
+$env:RAG_BASE_URL = "local"
 
 function Wait-Health {
     for ($i = 0; $i -lt 30; $i++) {
@@ -65,6 +70,20 @@ if ($created.status -ne "awaiting_human") {
     Stop-Api $api
     throw "期望 awaiting_human，实际 $($created.status)"
 }
+$createdPath = Join-Path $env:TEMP "demo_refund.json"
+$created | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $createdPath
+& $python (Join-Path $Root "scripts\score_run.py") refund $createdPath
+if ($LASTEXITCODE -ne 0) {
+    Stop-Api $api
+    throw "退款单打分未通过"
+}
+$closedPath = Join-Path $env:TEMP "demo_tickets_before.json"
+Invoke-WebRequest -Uri "$base/tickets" -OutFile $closedPath
+& $python (Join-Path $Root "scripts\score_run.py") absent $closedPath $ticketId
+if ($LASTEXITCODE -ne 0) {
+    Stop-Api $api
+    throw "通过之前工单不应出现在已处理列表"
+}
 
 Write-Host "3. 停掉 API 进程 $($api.Id)，内存里的待审记录随之消失"
 Stop-Api $api
@@ -81,10 +100,36 @@ if ($resumed.status -ne "resolved") {
     throw "期望 resolved，实际 $($resumed.status)"
 }
 
+$afterPath = Join-Path $env:TEMP "demo_tickets_after.json"
+Invoke-WebRequest -Uri "$base/tickets" -OutFile $afterPath
+& $python (Join-Path $Root "scripts\score_run.py") resolved $afterPath $ticketId
+if ($LASTEXITCODE -ne 0) {
+    Stop-Api $api
+    throw "结案状态或历史不符合 open → resolved"
+}
+
+Write-Host "5. 问候单 $helloId 只结束，不检索"
+$hello = Send-Json Post "/runs" @{
+    ticket = @{
+        ticket_id = $helloId
+        subject   = "Hello"
+        body      = "Just saying hi"
+    }
+    auto_approve = $false
+}
+$hello | ConvertTo-Json -Depth 6
+$helloPath = Join-Path $env:TEMP "demo_hello.json"
+$hello | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $helloPath
+& $python (Join-Path $Root "scripts\score_run.py") greeting $helloPath
+if ($LASTEXITCODE -ne 0) {
+    Stop-Api $api
+    throw "问候单打分未通过"
+}
+
 if ($created.trace_id) {
-    Write-Host "5. 节点追踪 $($created.trace_id)"
+    Write-Host "6. 节点追踪 $($created.trace_id)"
     Invoke-RestMethod -Uri "$base/traces/$($created.trace_id)" | ConvertTo-Json -Depth 6
 }
 
 Stop-Api $api
-Write-Host "演示结束：创建后暂停，进程重启后同一工单结案。"
+Write-Host "演示结束：本地知识库检索成功，通过前未结案，重启后同一工单结案，问候单不检索。"

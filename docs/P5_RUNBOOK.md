@@ -48,4 +48,4 @@ RUNTIME_DB_PATH=.data/runtime.db
 TRACE_BUDGET_MS=2000
 ```
 
-Langfuse 的 Key 仍保留在配置里。当前追踪以 SQLite 和日志为准，没有 Key 也能回放。
+SQLite 和日志在没配 Langfuse 时仍然够用。配了 `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 和 `LANGFUSE_BASE_URL` 之后，同一次运行还会送到 Langfuse：按 `prompt_version` 过滤 version 或 tag，用 `latency_ms` 看延迟，用 `no_model_fallback` 和黄金集得分看质量。

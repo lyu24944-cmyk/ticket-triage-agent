@@ -26,10 +26,11 @@ from ticket_triage.config import settings  # noqa: E402
 from ticket_triage.graph.workflow import run_triage  # noqa: E402
 from ticket_triage.llm import ModelLLM, get_llm  # noqa: E402
 from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
+from ticket_triage.observability import prompt_version, score_eval_case  # noqa: E402
 
 TOOL_VERSION = "p3-gateway"
 USES_MODEL = isinstance(get_llm(), ModelLLM)
-PROMPT_VERSION = f"{settings.llm_provider}-act-v2" if USES_MODEL else "stub-act-v1"
+PROMPT_VERSION = prompt_version()
 
 THRESHOLDS = {
     "category_accuracy": 0.85,
@@ -91,6 +92,18 @@ def main() -> int:
             ),
         }
         rows.append(row)
+        score_eval_case(
+            result.trace_id,
+            {
+                "category_accuracy": row["category"],
+                "priority_accuracy": row["priority"],
+                "citation_present_when_kb_hit": row["citation"],
+                "no_invented_citations": row["no_invented"],
+                "no_empty_draft": row["draft"],
+                "illegal_tool_free": row["illegal"],
+                "tool_decision": row["tool_decision"],
+            },
+        )
         case_results.append(
             {
                 "ticket_id": case["ticket_id"],

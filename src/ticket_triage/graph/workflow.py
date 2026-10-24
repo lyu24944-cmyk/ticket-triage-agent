@@ -20,6 +20,7 @@ from ticket_triage.graph.nodes import (
 )
 from ticket_triage.graph.state import TriageState
 from ticket_triage.models import DraftReply, HumanDecision, RunRequest, RunResult, TicketIn
+from ticket_triage.observability import run_observed
 from ticket_triage.runtime import (
     archive_pending,
     get_trace,
@@ -149,7 +150,7 @@ def run_triage(req: RunRequest) -> RunResult:
         "awaiting_human": False,
         "trace_id": trace_id,
     }
-    final = graph.invoke(initial)
+    final = run_observed(graph, initial, trace_id, req.ticket)
     final["trace_id"] = trace_id
     result = _result_from_state(req.ticket.ticket_id, final, trace_id)
     if result.awaiting_human:

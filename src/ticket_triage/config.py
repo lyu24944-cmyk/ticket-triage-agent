@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
     require_hitl: bool = True
     max_tool_retries: int = 2
     # P2：是否通过 MCP 调用工具
@@ -29,9 +31,19 @@ class Settings(BaseSettings):
     # P5：暂停状态与节点追踪
     runtime_db_path: str | None = None
     trace_budget_ms: float = 2000.0
-    # P6：设置后，知识库检索改调 citation-rag-agent，例如 http://127.0.0.1:8001
+    # P6：设置后，知识库检索改调 citation-rag-agent，例如 http://127.0.0.1:8001。
+    # local 表示仍用仓库里的关键词文档。空字符串不会覆盖 .env 里已有的地址。
     rag_base_url: str | None = None
     rag_timeout_seconds: float = 10.0
+
+    @field_validator("rag_base_url", mode="before")
+    @classmethod
+    def local_rag_uses_keyword_kb(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {"", "local", "off", "none"}:
+            return None
+        return value
 
 
 settings = Settings()

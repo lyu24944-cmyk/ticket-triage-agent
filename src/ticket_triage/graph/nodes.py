@@ -55,6 +55,12 @@ def _merge_hits(existing: list[dict] | None, hits: list[dict]) -> list[dict]:
     return merged
 
 
+def _trace_tool(name: str, arguments: dict, output: dict, ok: bool) -> None:
+    from ticket_triage.observability import record_tool
+
+    record_tool(name=name, arguments=arguments, output=output, ok=ok)
+
+
 def act_node(state: TriageState) -> dict:
     """按策略选择一个只读工具或结束。写状态不在白名单内。"""
     calls = [dict(item) for item in (state.get("tool_calls") or [])]
@@ -82,6 +88,7 @@ def act_node(state: TriageState) -> dict:
     base = {"act_use_stub": use_stub, "tool_calls": calls}
     if action.get("action") == "finish":
         calls.append({"name": "finish", "arguments": {}, "ok": True, "error": None})
+        _trace_tool("finish", {}, {"ok": True}, True)
         return {**base, "status": "enriched", "errors": errors}
 
     name = str(action.get("name") or "")
@@ -89,6 +96,7 @@ def act_node(state: TriageState) -> dict:
     if name not in ALLOWED_ACT_TOOLS:
         error = f"tool_not_allowed:{name}"
         calls.append({"name": name, "arguments": dict(arguments), "ok": False, "error": error})
+        _trace_tool(name, dict(arguments), {"ok": False, "error": error}, False)
         errors.append(error)
         return {**base, "status": "acting", "errors": errors}
 
@@ -100,6 +108,7 @@ def act_node(state: TriageState) -> dict:
     if _already_succeeded(calls, name, arguments):
         error = f"tool_duplicate:{name}"
         calls.append({"name": name, "arguments": arguments, "ok": False, "error": error})
+        _trace_tool(name, arguments, {"ok": False, "error": error}, False)
         errors.append(error)
         return {**base, "status": "acting", "errors": errors}
 
@@ -112,6 +121,7 @@ def act_node(state: TriageState) -> dict:
                 "error": "ticket_id_mismatch",
             }
         )
+        _trace_tool(name, arguments, {"ok": False, "error": "ticket_id_mismatch"}, False)
         errors.append("ticket_id_mismatch")
         return {**base, "status": "acting", "errors": errors}
 
@@ -119,6 +129,7 @@ def act_node(state: TriageState) -> dict:
         if name == "search_knowledge_base":
             hits = gateway.search_knowledge_base(arguments["query"])
             calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
+            _trace_tool(name, arguments, {"documents": [hit.get("id") for hit in hits]}, True)
             return {
                 **base,
                 "kb_hits": _merge_hits(state.get("kb_hits"), hits),
@@ -128,6 +139,12 @@ def act_node(state: TriageState) -> dict:
             }
         history = gateway.get_ticket_history(arguments["ticket_id"])
         calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
+        _trace_tool(
+            name,
+            arguments,
+            {"statuses": [item.get("status") for item in history if isinstance(item, dict)]},
+            True,
+        )
         return {
             **base,
             "history": history,
@@ -139,6 +156,7 @@ def act_node(state: TriageState) -> dict:
         retries = int(state.get("tool_retries") or 0) + 1
         error = f"enrich_failed: {exc}"
         calls.append({"name": name, "arguments": arguments, "ok": False, "error": error})
+        _trace_tool(name, arguments, {"ok": False, "error": error}, False)
         errors.append(error)
         return {
             **base,

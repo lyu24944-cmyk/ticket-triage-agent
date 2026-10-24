@@ -45,7 +45,7 @@ act 只可选 search_knowledge_base、get_ticket_history，或 finish。
 update_ticket_status 只能由 finalize 在人审之后调用。
 
 act / finalize 工具面：
-  未设置 RAG_BASE_URL、USE_MCP=false → 进程内关键词工具
+  未设置 RAG_BASE_URL，或设为 local、USE_MCP=false → 进程内关键词工具
   RAG_BASE_URL=http://127.0.0.1:8001 → 知识库检索改调 citation-rag-agent
   USE_MCP=true → MCP stdio 客户端 → python -m mcp_server
 ```
@@ -98,6 +98,14 @@ python evals/run_evals.py
 ```
 
 不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。
+
+配了 Langfuse 时，每次运行会多送一条 `ticket-triage` trace。版本号（例如 `openai-act-v2` 或 `stub-act-v1`）写在 trace 的 version 和 tag 上，延迟记成 `latency_ms`，有没有退回 stub 记成 `no_model_fallback`。黄金集还会把类别、优先级、引用和工具选择的得分贴到同一条 trace 上。不配 Key 时只保留原来的 SQLite 节点追踪。
+
+```powershell
+$env:LANGFUSE_PUBLIC_KEY="pk-lf-..."
+$env:LANGFUSE_SECRET_KEY="sk-lf-..."
+$env:LANGFUSE_BASE_URL="https://cloud.langfuse.com"   # 美国区用 https://us.cloud.langfuse.com
+```
 
 分类只能落在现有的四个类别和四个优先级里。不合规、超时或不是 JSON 时，退回关键词结果并记 `classify_model_failed`。起草时提示里只给本次检索到的文档。模型返回的引用编号不在其中时会被删掉；没有检索结果时引用为空。模型这条路径上，任何一张工单的分类、工具调度或草稿退回 stub，评测都会失败；延迟只记录，不卡 2 秒预算。约 40 条黄金集还要求非法工具调用为 0。stub 的工具选择必须全对；模型路径的工具选择准确率门槛是 0.70。
 
