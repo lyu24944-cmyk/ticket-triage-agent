@@ -36,6 +36,10 @@ flowchart TD
   spans --> traces[GET /traces]
 ```
 
+审核台在人工通过之前停住。下面这张退款单已经检索并引用 `kb-billing-refund`，状态要等通过或驳回才会写。
+
+![审核台：退款单等待人工审核](docs/images/review-desk.png)
+
 ```text
 START → ingest → classify → act ⇄ (最多 4 步，失败可重试) → draft → hitl_gate
                                                                  ├─ awaiting_human（写入 SQLite 后暂停）
