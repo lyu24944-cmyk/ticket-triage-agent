@@ -270,3 +270,4 @@ CI 不新增需要 secret 的 job。
 | 2026-10-24 | openai-act-v2 / deepseek-flash | 仅 g-21–g-26：1.0 | 仅这 6 条：1.0 | 仅这 6 条：伪造 0 | 0 | 仅这 6 条：1.0 | 0 | 只改了提示词，没改用例。类别是 other 时必须 finish；与退款、密码登录、注销无关的询问优先级用 low。这 6 条都只调用了 finish，引用为空，没有退回 stub。40 条全量还没重跑，上一行的 0.85 仍然是全量数字。 |
 | 2026-10-24 | openai-act-v2 / deepseek-flash | 1.0 | 0.90 | 1.0，伪造 0 | 0 | 1.0 | 1 | 全量 40 条。g-2、g-12、g-29、g-36（无法登录）优先级被标成 medium。g-39 调度时 SSL 中断，退回 stub，门禁失败。E 桶正文仍含 update_ticket_status，没有成功调用。 |
 | 2026-10-24 | openai-act-v2 / deepseek-flash | 1.0 | 1.0 | 1.0，伪造 0 | 0 | 1.0 | 0 | 传输错误同一请求最多再试 2 次；无法登录、cannot login 明确为 high。全量门禁通过。g-21 到 g-26 只 finish。g-27 到 g-30、g-34 只检索和查当前工单；g-31 到 g-33 只 finish。多次检索会合并命中，不再覆盖。stub 路径仍为 1.0。 |
+| 2026-10-24 | openai-act-v2 / deepseek-flash | 1.0 | 1.0 | 1.0，伪造 0 | 0 | 1.0 | 0 | 按现有 .env 重跑全量，忽略 RAG_BASE_URL，未改黄金集。非法调用 0，无退回 stub，工具选择 1.0。p95 15164 ms。门禁通过。 |
