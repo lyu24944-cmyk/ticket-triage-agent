@@ -63,6 +63,29 @@ def test_billing_searches_then_reads_history() -> None:
     assert any(item.startswith("kb-billing") for item in result.draft.citations)
 
 
+def test_second_search_keeps_earlier_hits(monkeypatch) -> None:
+    scripted = _Scripted(
+        [
+            {
+                "action": "tool",
+                "name": "search_knowledge_base",
+                "arguments": {"query": "refund"},
+            },
+            {
+                "action": "tool",
+                "name": "search_knowledge_base",
+                "arguments": {"query": "password"},
+            },
+            {"action": "finish"},
+        ]
+    )
+    monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: scripted)
+    result = _run("act-merge", "Invoice", "refund and password")
+    assert result.draft is not None
+    assert "kb-billing-refund" in result.draft.citations
+    assert "kb-tech-reset" in result.draft.citations
+
+
 def test_duplicate_search_hits_gateway_once(monkeypatch) -> None:
     calls = {"n": 0}
     real = gateway.search_knowledge_base

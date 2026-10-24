@@ -29,7 +29,7 @@ from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
 
 TOOL_VERSION = "p3-gateway"
 USES_MODEL = isinstance(get_llm(), ModelLLM)
-PROMPT_VERSION = f"{settings.llm_provider}-act-v1" if USES_MODEL else "stub-act-v1"
+PROMPT_VERSION = f"{settings.llm_provider}-act-v2" if USES_MODEL else "stub-act-v1"
 
 THRESHOLDS = {
     "category_accuracy": 0.85,

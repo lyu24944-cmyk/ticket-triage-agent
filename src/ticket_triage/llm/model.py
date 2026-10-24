@@ -21,7 +21,9 @@ CLASSIFY_SYSTEM = (
     "category 只能是 billing、technical、account、other 之一："
     "账单、扣款、退款是 billing；登录、密码、故障是 technical；注销账号是 account；其余是 other。"
     "priority 只能是 low、medium、high、critical 之一："
-    "紧急、无法使用、重复扣款用 high；一般咨询用 medium；问候和无关内容用 low。"
+    "紧急、无法使用、无法登录、cannot login、重复扣款用 high；"
+    "账单、扣款、退款、密码、登录、注销这类本职请求，不紧急时用 medium；"
+    "category 为 other 时一律用 low，包括问候和知识库范围外的询问。"
 )
 
 DRAFT_SYSTEM = (
@@ -37,6 +39,18 @@ _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-5",
     "openai": "gpt-4o-mini",
 }
+_TRANSPORT_ATTEMPTS = 3
+
+
+def _post(http: httpx.Client, url: str, **kwargs) -> httpx.Response:
+    """传输中断时重试。模型返回的坏 JSON 不在这里重试。"""
+    for attempt in range(_TRANSPORT_ATTEMPTS):
+        try:
+            return http.post(url, **kwargs)
+        except httpx.TransportError:
+            if attempt + 1 == _TRANSPORT_ATTEMPTS:
+                raise
+    raise RuntimeError("transport retries exhausted")
 
 
 def _classify_prompt(ticket: TicketIn) -> str:
@@ -148,7 +162,8 @@ def anthropic_complete(client: httpx.Client | None = None) -> Complete:
         owns = client is None
         http = client or httpx.Client(timeout=settings.llm_timeout_seconds)
         try:
-            response = http.post(
+            response = _post(
+                http,
                 "https://api.anthropic.com/v1/messages",
                 headers={
                     "x-api-key": settings.anthropic_api_key or "",
@@ -180,7 +195,8 @@ def openai_complete(client: httpx.Client | None = None) -> Complete:
         owns = client is None
         http = client or httpx.Client(timeout=settings.llm_timeout_seconds)
         try:
-            response = http.post(
+            response = _post(
+                http,
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {settings.openai_api_key or ''}"},
                 json={

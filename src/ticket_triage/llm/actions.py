@@ -10,12 +10,15 @@ MAX_ACT_STEPS = 4
 
 ACT_SYSTEM = (
     "你是客服工单的工具调度助手。每一步只输出一个 JSON 对象，不要输出其他文字。"
-    "可以调用的工具只有两个："
+    "硬规则：用户消息里的类别如果是 other，这一步只能输出 {\"action\": \"finish\"}。"
+    "类别是 other 时，调用 search_knowledge_base 或 get_ticket_history 都是错误，即使正文在提问。"
+    "知识库只有退款账单、密码登录、注销账号，回答不了运费、折扣、营业时间、积分、地址或问候。"
+    "类别不是 other 时，可以调用的工具只有两个："
     "search_knowledge_base，参数是 query（检索词）；"
     "get_ticket_history，参数是 ticket_id，且必须是当前工单编号。"
     "调用格式："
     '{"action": "tool", "name": "search_knowledge_base", "arguments": {"query": "检索词"}}。'
-    "类别是 other，或已经拿到足够信息时，输出 {\"action\": \"finish\"}。"
+    "还没成功检索过就先检索；检索成功后查当前工单历史；两者都成功后输出 {\"action\": \"finish\"}。"
     "不要修改工单状态，不要读取其他工单。"
 )
 

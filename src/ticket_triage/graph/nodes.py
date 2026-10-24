@@ -42,6 +42,19 @@ def _finished(calls: list[dict]) -> bool:
     return any(call.get("ok") and call.get("name") == "finish" for call in calls)
 
 
+def _merge_hits(existing: list[dict] | None, hits: list[dict]) -> list[dict]:
+    """同一次运行里多次检索都保留，后一次不覆盖前面已经拿到的文档。"""
+    merged = [dict(hit) for hit in (existing or [])]
+    seen = {hit.get("id") for hit in merged}
+    for hit in hits:
+        hit_id = hit.get("id")
+        if hit_id in seen:
+            continue
+        merged.append(dict(hit))
+        seen.add(hit_id)
+    return merged
+
+
 def act_node(state: TriageState) -> dict:
     """按策略选择一个只读工具或结束。写状态不在白名单内。"""
     calls = [dict(item) for item in (state.get("tool_calls") or [])]
@@ -108,7 +121,7 @@ def act_node(state: TriageState) -> dict:
             calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
             return {
                 **base,
-                "kb_hits": hits,
+                "kb_hits": _merge_hits(state.get("kb_hits"), hits),
                 "status": "acting",
                 "tool_retries": 0,
                 "errors": errors,

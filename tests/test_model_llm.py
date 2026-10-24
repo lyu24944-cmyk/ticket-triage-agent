@@ -155,3 +155,19 @@ def test_openai_request_shape(monkeypatch) -> None:
 
     complete = openai_complete(httpx.Client(transport=httpx.MockTransport(handler)))
     assert complete("system", "user") == "ok"
+
+
+def test_openai_retries_transient_transport_error(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(settings, "openai_base_url", "https://llm.test/v1")
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectError("eof", request=request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    complete = openai_complete(httpx.Client(transport=httpx.MockTransport(handler)))
+    assert complete("system", "user") == "ok"
+    assert calls["n"] == 2
