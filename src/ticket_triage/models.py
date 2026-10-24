@@ -65,6 +65,7 @@ class RunResult(BaseModel):
     draft: DraftReply | None = None
     awaiting_human: bool = False
     errors: list[str] = Field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     trace_id: str | None = None
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from ticket_triage.config import settings
 from ticket_triage.graph.state import TriageState
 from ticket_triage.llm import StubLLM, get_llm
+from ticket_triage.llm.actions import ALLOWED_ACT_TOOLS, MAX_ACT_STEPS, stub_next_action
 from ticket_triage.tools import gateway
 
 
@@ -30,31 +31,107 @@ def classify_node(state: TriageState) -> dict:
     return {"classification": classification, "status": "classified"}
 
 
-def enrich_node(state: TriageState) -> dict:
-    """检索知识库与历史；失败时记录错误供重试。"""
+def _already_succeeded(calls: list[dict], name: str, arguments: dict) -> bool:
+    for call in calls:
+        if call.get("ok") and call.get("name") == name and call.get("arguments") == arguments:
+            return True
+    return False
+
+
+def _finished(calls: list[dict]) -> bool:
+    return any(call.get("ok") and call.get("name") == "finish" for call in calls)
+
+
+def act_node(state: TriageState) -> dict:
+    """按策略选择一个只读工具或结束。写状态不在白名单内。"""
+    calls = [dict(item) for item in (state.get("tool_calls") or [])]
+    if _finished(calls) or len(calls) >= MAX_ACT_STEPS:
+        errors: list[str] = []
+        if not _finished(calls):
+            errors.append("act_max_steps")
+        return {"tool_calls": calls, "status": "enriched", "errors": errors}
+
     ticket = state["ticket"]
     classification = state.get("classification")
-    # 主题 + 正文一起检索，避免正文里的「退款/refund」被丢掉
-    query = (
-        f"{ticket.subject} {ticket.body} "
-        f"{classification.category.value if classification else ''}"
-    )
+    llm = get_llm()
+    use_stub = bool(state.get("act_use_stub"))
+    errors = []
+    if use_stub:
+        action = stub_next_action(ticket, classification, calls)
+    else:
+        try:
+            action = llm.next_action(ticket, classification, calls)
+        except Exception as exc:  # noqa: BLE001 — 坏 JSON 或模型错误时改走 stub
+            errors.append(f"act_model_failed: {exc}")
+            use_stub = True
+            action = stub_next_action(ticket, classification, calls)
+
+    base = {"act_use_stub": use_stub, "tool_calls": calls}
+    if action.get("action") == "finish":
+        calls.append({"name": "finish", "arguments": {}, "ok": True, "error": None})
+        return {**base, "status": "enriched", "errors": errors}
+
+    name = str(action.get("name") or "")
+    arguments = action.get("arguments") if isinstance(action.get("arguments"), dict) else {}
+    if name not in ALLOWED_ACT_TOOLS:
+        error = f"tool_not_allowed:{name}"
+        calls.append({"name": name, "arguments": dict(arguments), "ok": False, "error": error})
+        errors.append(error)
+        return {**base, "status": "acting", "errors": errors}
+
+    if name == "search_knowledge_base":
+        arguments = {"query": str(arguments.get("query") or "")}
+    else:
+        arguments = {"ticket_id": str(arguments.get("ticket_id") or "")}
+
+    if _already_succeeded(calls, name, arguments):
+        error = f"tool_duplicate:{name}"
+        calls.append({"name": name, "arguments": arguments, "ok": False, "error": error})
+        errors.append(error)
+        return {**base, "status": "acting", "errors": errors}
+
+    if name == "get_ticket_history" and arguments["ticket_id"] != ticket.ticket_id:
+        calls.append(
+            {
+                "name": name,
+                "arguments": arguments,
+                "ok": False,
+                "error": "ticket_id_mismatch",
+            }
+        )
+        errors.append("ticket_id_mismatch")
+        return {**base, "status": "acting", "errors": errors}
+
     try:
-        hits = gateway.search_knowledge_base(query)
-        history = gateway.get_ticket_history(ticket.ticket_id)
+        if name == "search_knowledge_base":
+            hits = gateway.search_knowledge_base(arguments["query"])
+            calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
+            return {
+                **base,
+                "kb_hits": hits,
+                "status": "acting",
+                "tool_retries": 0,
+                "errors": errors,
+            }
+        history = gateway.get_ticket_history(arguments["ticket_id"])
+        calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
         return {
-            "kb_hits": hits,
+            **base,
             "history": history,
-            "status": "enriched",
+            "status": "acting",
             "tool_retries": 0,
+            "errors": errors,
         }
-    except Exception as exc:  # noqa: BLE001 — 工具失败写入状态
+    except Exception as exc:  # noqa: BLE001 — 工具失败写入状态，由图决定是否重试
         retries = int(state.get("tool_retries") or 0) + 1
+        error = f"enrich_failed: {exc}"
+        calls.append({"name": name, "arguments": arguments, "ok": False, "error": error})
+        errors.append(error)
         return {
-            "errors": [f"enrich_failed: {exc}"],
+            **base,
             "tool_retries": retries,
-            "kb_hits": [],
             "status": "enrich_error",
+            "errors": errors,
         }
 
 

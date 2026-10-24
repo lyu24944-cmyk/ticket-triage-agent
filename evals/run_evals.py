@@ -16,9 +16,11 @@ from scorers import (  # noqa: E402
     aggregate,
     score_category,
     score_citation,
+    score_illegal_tool_free,
     score_no_invented_citation,
     score_nonempty_draft,
     score_priority,
+    score_tool_decision,
 )
 from ticket_triage.config import settings  # noqa: E402
 from ticket_triage.graph.workflow import run_triage  # noqa: E402
@@ -27,7 +29,7 @@ from ticket_triage.models import RunRequest, TicketIn  # noqa: E402
 
 TOOL_VERSION = "p3-gateway"
 USES_MODEL = isinstance(get_llm(), ModelLLM)
-PROMPT_VERSION = f"{settings.llm_provider}-classify-draft-v1" if USES_MODEL else "stub-v1"
+PROMPT_VERSION = f"{settings.llm_provider}-act-v1" if USES_MODEL else "stub-act-v1"
 
 THRESHOLDS = {
     "category_accuracy": 0.85,
@@ -35,13 +37,20 @@ THRESHOLDS = {
     "citation_present_when_kb_hit": 0.90,
     "no_invented_citations": 1.0,
     "no_empty_draft": 1.0,
+    "illegal_tool_rate": 1.0,
+    "tool_decision": 1.0,
 }
+# 模型不必和 stub 一样每次都选对工具；stub / CI 仍要求 1.0。
+if USES_MODEL:
+    THRESHOLDS["tool_decision"] = 0.70
 
 GOLDEN = Path(__file__).parent / "golden" / "tickets.jsonl"
 REPORT_PATH = Path(__file__).parent / "last_report.json"
 
 
 def main() -> int:
+    # 40 条黄金集按 3 篇关键词文档编写。忽略 .env 里的 RAG_BASE_URL，保证和 CI 同一知识库。
+    settings.rag_base_url = None
     rows = []
     latencies = []
     case_results = []
@@ -76,6 +85,10 @@ def main() -> int:
                 citations, bool(expect.get("forbid_citations"))
             ),
             "draft": score_nonempty_draft(result.draft.body),
+            "illegal": score_illegal_tool_free(result.tool_calls),
+            "tool_decision": score_tool_decision(
+                result.tool_calls, expect.get("must_search")
+            ),
         }
         rows.append(row)
         case_results.append(
@@ -90,6 +103,12 @@ def main() -> int:
                 "classify_model_failed": any(
                     item.startswith("classify_model_failed") for item in result.errors
                 ),
+                "act_model_failed": any(
+                    item.startswith("act_model_failed") for item in result.errors
+                ),
+                "tool_calls": [call.get("name") for call in result.tool_calls],
+                "illegal": row["illegal"],
+                "tool_decision": row["tool_decision"],
                 "errors": list(result.errors),
             }
         )
@@ -123,6 +142,9 @@ def main() -> int:
     classify_fell_back = [c["ticket_id"] for c in case_results if c["classify_model_failed"]]
     if USES_MODEL and classify_fell_back:
         failed.append(f"classify_model_failed: {', '.join(classify_fell_back)}")
+    act_fell_back = [c["ticket_id"] for c in case_results if c["act_model_failed"]]
+    if USES_MODEL and act_fell_back:
+        failed.append(f"act_model_failed: {', '.join(act_fell_back)}")
 
     if failed:
         print("评测门禁失败:", "; ".join(failed), file=sys.stderr)

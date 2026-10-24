@@ -11,9 +11,9 @@ from langgraph.graph import END, START, StateGraph
 
 from ticket_triage.config import settings
 from ticket_triage.graph.nodes import (
+    act_node,
     classify_node,
     draft_node,
-    enrich_node,
     finalize_node,
     hitl_gate_node,
     ingest_node,
@@ -74,12 +74,14 @@ def _traced(name: str, fn: Callable[[TriageState], dict]) -> Callable[[TriageSta
     return wrapped
 
 
-def _route_after_enrich(state: TriageState) -> str:
-    """enrich 后路由：可重试、或软降级进入起草。"""
+def _route_after_act(state: TriageState) -> str:
+    """act 后路由：工具失败可重试，未结束则再走一步，否则起草。"""
     if state.get("status") == "enrich_error":
         if int(state.get("tool_retries") or 0) <= settings.max_tool_retries:
-            return "enrich"
+            return "act"
         return "draft"
+    if state.get("status") == "acting":
+        return "act"
     return "draft"
 
 
@@ -95,15 +97,19 @@ def build_graph():
     g: StateGraph = StateGraph(TriageState)
     g.add_node("ingest", _traced("ingest", ingest_node))
     g.add_node("classify", _traced("classify", classify_node))
-    g.add_node("enrich", _traced("enrich", enrich_node))
+    g.add_node("act", _traced("act", act_node))
     g.add_node("draft", _traced("draft", draft_node))
     g.add_node("hitl_gate", _traced("hitl_gate", hitl_gate_node))
     g.add_node("finalize", _traced("finalize", finalize_node))
 
     g.add_edge(START, "ingest")
     g.add_edge("ingest", "classify")
-    g.add_edge("classify", "enrich")
-    g.add_conditional_edges("enrich", _route_after_enrich, {"enrich": "enrich", "draft": "draft"})
+    g.add_edge("classify", "act")
+    g.add_conditional_edges(
+        "act",
+        _route_after_act,
+        {"act": "act", "draft": "draft"},
+    )
     g.add_edge("draft", "hitl_gate")
     g.add_conditional_edges("hitl_gate", _route_after_hitl, {"finalize": "finalize", END: END})
     g.add_edge("finalize", END)
@@ -125,6 +131,7 @@ def _result_from_state(ticket_id: str, state: dict[str, Any], trace_id: str | No
         draft=state.get("draft"),
         awaiting_human=bool(state.get("awaiting_human")),
         errors=list(state.get("errors") or []),
+        tool_calls=list(state.get("tool_calls") or []),
         trace_id=trace_id,
     )
 
@@ -138,6 +145,7 @@ def run_triage(req: RunRequest) -> RunResult:
         "auto_approve": req.auto_approve,
         "errors": [],
         "tool_retries": 0,
+        "tool_calls": [],
         "awaiting_human": False,
         "trace_id": trace_id,
     }

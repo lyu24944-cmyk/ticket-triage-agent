@@ -167,6 +167,15 @@ def list_pending() -> list[dict[str, Any]]:
                 "citations": list(draft.citations) if draft else [],
                 "kb_hits": hits,
                 "errors": list(state.get("errors") or []),
+                "tool_calls": [
+                    {
+                        "name": call.get("name"),
+                        "ok": bool(call.get("ok")),
+                        "error": call.get("error"),
+                    }
+                    for call in (state.get("tool_calls") or [])
+                    if isinstance(call, dict)
+                ],
             }
         )
     return items

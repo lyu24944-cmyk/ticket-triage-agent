@@ -26,5 +26,7 @@ class TriageState(TypedDict, total=False):
     human_edits: str | None
     errors: Annotated[list[str], _merge_errors]
     tool_retries: int
+    tool_calls: list[dict[str, Any]]
+    act_use_stub: bool
     auto_approve: bool
     trace_id: str

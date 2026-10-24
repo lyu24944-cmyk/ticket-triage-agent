@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from ticket_triage.config import settings
+from ticket_triage.llm.actions import stub_next_action
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
 
 logger = logging.getLogger("ticket_triage.llm")
@@ -59,6 +60,14 @@ class StubLLM:
         if classification.needs_escalation:
             body += " 【已标记账单升级】"
         return DraftReply(body=body, citations=citations, confidence=confidence)
+
+    def next_action(
+        self,
+        ticket: TicketIn,
+        classification: Classification | None,
+        tool_calls: list[dict],
+    ) -> dict:
+        return stub_next_action(ticket, classification, tool_calls)
 
 
 def get_llm():

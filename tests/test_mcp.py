@@ -86,8 +86,8 @@ def test_enrich_soft_fallback_on_mcp_timeout(monkeypatch):
         RunRequest(
             ticket=TicketIn(
                 ticket_id="mcp-timeout",
-                subject="Hello",
-                body="Just saying hi",
+                subject="Urgent refund request",
+                body="I was charged twice, need a refund",
             ),
             auto_approve=True,
         )

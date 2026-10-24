@@ -9,6 +9,7 @@ from typing import Callable
 import httpx
 
 from ticket_triage.config import settings
+from ticket_triage.llm.actions import ACT_SYSTEM, act_user_prompt, parse_action
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
 
 Complete = Callable[[str, str], str]
@@ -129,6 +130,15 @@ class ModelLLM:
             body += " 【已标记账单升级】"
         confidence = 0.75 if citations else 0.4
         return DraftReply(body=body, citations=citations, confidence=confidence)
+
+    def next_action(
+        self,
+        ticket: TicketIn,
+        classification: Classification | None,
+        tool_calls: list[dict],
+    ) -> dict:
+        raw = self._complete(ACT_SYSTEM, act_user_prompt(ticket, classification, tool_calls))
+        return parse_action(_parse_json(raw))
 
 
 def anthropic_complete(client: httpx.Client | None = None) -> Complete:

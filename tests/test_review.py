@@ -29,10 +29,16 @@ def test_pending_lists_ticket_until_approved() -> None:
     assert "kb-billing" in "".join(match[0]["citations"])
     assert match[0]["draft_body"]
     assert match[0]["errors"] == []
+    assert [call["name"] for call in match[0]["tool_calls"]] == [
+        "search_knowledge_base",
+        "get_ticket_history",
+        "finish",
+    ]
 
     page = client.get("/review")
     assert page.status_code == 200
     assert "工单审核台" in page.text
+    assert "本次工具调用" in page.text
 
     decided = client.post("/runs/human", json={"ticket_id": "review-1", "approved": True})
     assert decided.json()["status"] == "resolved"

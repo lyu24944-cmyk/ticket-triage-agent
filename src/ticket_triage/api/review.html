@@ -157,11 +157,19 @@
         `<div class="hit"><strong>${esc(hit.title)}</strong> <span class="meta">${esc(hit.id)}</span><div>${esc(hit.body)}</div></div>`
       ).join("") || "<p class=\"empty\">没有引用。</p>";
       const modelWarnings = (item.errors || []).filter((error) =>
-        error.startsWith("classify_model_failed") || error.startsWith("draft_model_failed")
-      ).map((error) => error.startsWith("classify_model_failed")
-        ? "分类模型失败，当前分类由关键词规则生成。"
-        : "草稿模型失败，当前草稿由 stub 生成。"
-      );
+        error.startsWith("classify_model_failed")
+        || error.startsWith("draft_model_failed")
+        || error.startsWith("act_model_failed")
+      ).map((error) => {
+        if (error.startsWith("classify_model_failed")) return "分类模型失败，当前分类由关键词规则生成。";
+        if (error.startsWith("act_model_failed")) return "工具调度模型失败，已改用固定规则选择工具。";
+        return "草稿模型失败，当前草稿由 stub 生成。";
+      });
+      const toolRows = (item.tool_calls || []).map((call) => {
+        const flag = call.ok ? "成功" : "失败";
+        const reason = call.error ? ` · ${esc(call.error)}` : "";
+        return `<li>${esc(call.name)} · ${flag}${reason}</li>`;
+      }).join("") || "<li class=\"empty\">没有工具调用。</li>";
       const warningMarkup = modelWarnings.length
         ? `<p class="warning">${modelWarnings.map(esc).join("<br>")}</p>`
         : "";
@@ -170,6 +178,8 @@
         <p class="meta">${esc(item.ticket_id)} · ${esc(item.category)} / ${esc(item.priority)}</p>
         ${warningMarkup}
         <p>${esc(item.body)}</p>
+        <h2>本次工具调用</h2>
+        <ul>${toolRows}</ul>
         <h2>草稿</h2>
         <pre>${esc(item.draft_body)}</pre>
         <h2>引用</h2>
