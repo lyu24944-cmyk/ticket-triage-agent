@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     llm_provider: str = "stub"
     llm_model: str | None = None
     llm_timeout_seconds: float = 30.0
+    # 分类、调度、起草共用的上下文上限。超出后先删最早的工具结果。
+    context_token_budget: int = 1200
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     anthropic_api_key: str | None = None
@@ -19,7 +21,11 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_base_url: str = "https://cloud.langfuse.com"
     require_hitl: bool = True
+    # 审核接口密钥。空则待审列表、人审和重新送审一律拒绝。
+    review_api_key: str | None = None
     max_tool_retries: int = 2
+    # 单进程内同时跑几张工单。HTTP 受理后在这些线程里分类和起草。
+    run_workers: int = 2
     # P2：是否通过 MCP 调用工具
     use_mcp: bool = False
     # MCP 工具调用超时（秒）
@@ -35,6 +41,13 @@ class Settings(BaseSettings):
     # local 表示仍用仓库里的关键词文档。空字符串不会覆盖 .env 里已有的地址。
     rag_base_url: str | None = None
     rag_timeout_seconds: float = 10.0
+
+    @field_validator("review_api_key", mode="before")
+    @classmethod
+    def blank_review_key_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("rag_base_url", mode="before")
     @classmethod

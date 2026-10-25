@@ -29,12 +29,17 @@ def get_ticket_history(ticket_id: str) -> list[dict[str, Any]]:
     return tickets_mod.get_ticket_history(ticket_id)
 
 
-def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -> dict[str, Any]:
+def update_ticket_status(
+    ticket_id: str,
+    status: str,
+    note: str | None = None,
+    reviewer: str | None = None,
+) -> dict[str, Any]:
     if settings.use_mcp:
         from ticket_triage.tools.mcp_gateway import update_ticket_status_mcp
 
-        return update_ticket_status_mcp(ticket_id, status, note)
-    return tickets_mod.update_ticket_status(ticket_id, status, note)
+        return update_ticket_status_mcp(ticket_id, status, note, reviewer=reviewer)
+    return tickets_mod.update_ticket_status(ticket_id, status, note, reviewer=reviewer)
 
 
 def get_ticket(ticket_id: str) -> dict[str, Any] | None:
@@ -45,6 +50,11 @@ def get_ticket(ticket_id: str) -> dict[str, Any] | None:
 def list_tickets(statuses: list[str] | None = None) -> list[dict[str, Any]]:
     """列出工单。直接读共享 SQLite。"""
     return tickets_mod.list_tickets(statuses)
+
+
+def delete_ticket(ticket_id: str) -> None:
+    """从共享工单库删除一张工单。"""
+    tickets_mod.delete_ticket(ticket_id)
 
 
 def seed_ticket(ticket_id: str, subject: str, body: str) -> None:

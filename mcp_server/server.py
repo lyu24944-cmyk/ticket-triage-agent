@@ -47,6 +47,7 @@ TOOL_SPECS = [
                 "ticket_id": {"type": "string"},
                 "status": {"type": "string", "enum": sorted(ALLOWED_STATUSES)},
                 "note": {"type": "string"},
+                "reviewer": {"type": "string"},
             },
             "required": ["ticket_id", "status"],
         },

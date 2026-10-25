@@ -19,7 +19,7 @@ def prompt_version() -> str:
 
     provider = (settings.llm_provider or "stub").lower()
     if isinstance(get_llm(), ModelLLM):
-        return f"{provider}-act-v2"
+        return f"{provider}-act-v3"
     return "stub-act-v1"
 
 

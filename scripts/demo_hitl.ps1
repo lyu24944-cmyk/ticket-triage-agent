@@ -15,6 +15,19 @@ $base = "http://127.0.0.1:8000"
 # 去掉进程里的 LLM_PROVIDER，让 .env 决定用 stub 还是真实模型。
 if (Test-Path Env:LLM_PROVIDER) { Remove-Item Env:LLM_PROVIDER }
 $env:RAG_BASE_URL = "local"
+if (-not $env:REVIEW_API_KEY) {
+    $envFile = Join-Path $Root ".env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile) {
+            if ($line -match '^\s*REVIEW_API_KEY=(.*)$') {
+                $env:REVIEW_API_KEY = $Matches[1].Trim().Trim('"').Trim("'")
+                break
+            }
+        }
+    }
+}
+if (-not $env:REVIEW_API_KEY) { $env:REVIEW_API_KEY = "demo-review-key" }
+$reviewHeaders = @{ "X-API-Key" = $env:REVIEW_API_KEY }
 
 function Wait-Health {
     for ($i = 0; $i -lt 30; $i++) {
@@ -38,10 +51,23 @@ function Start-Api {
     return $proc
 }
 
+function Wait-Run($created) {
+    if ($created.status -ne "running") { return $created }
+    for ($i = 0; $i -lt 240; $i++) {
+        $current = Invoke-RestMethod -Uri "$base/runs/$($created.trace_id)"
+        if ($current.status -eq "failed") {
+            throw "运行失败: $($current.errors -join ', ')"
+        }
+        if ($current.status -ne "running") { return $current }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "运行超时 $($created.trace_id)"
+}
+
 function Send-Json($method, $path, $payload) {
     $json = $payload | ConvertTo-Json -Depth 5 -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-    return Invoke-RestMethod -Method $method -Uri "$base$path" -ContentType "application/json; charset=utf-8" -Body $bytes
+    return Invoke-RestMethod -Method $method -Uri "$base$path" -Headers $reviewHeaders -ContentType "application/json; charset=utf-8" -Body $bytes
 }
 
 function Stop-Api($proc) {
@@ -52,6 +78,10 @@ function Stop-Api($proc) {
     }
     Start-Sleep -Milliseconds 600
 }
+
+Write-Host "0. 清掉上一次演示留下的 $ticketId 和 $helloId"
+& $python -c "from ticket_triage.graph.workflow import discard_ticket; discard_ticket('demo-60s'); discard_ticket('demo-hello')"
+if ($LASTEXITCODE -ne 0) { throw "清理演示工单失败" }
 
 Write-Host "1. 启动 API"
 $api = Start-Api
@@ -65,6 +95,7 @@ $created = Send-Json Post "/runs" @{
     }
     auto_approve = $false
 }
+$created = Wait-Run $created
 $created | ConvertTo-Json -Depth 6
 if ($created.status -ne "awaiting_human") {
     Stop-Api $api
@@ -78,7 +109,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "退款单打分未通过"
 }
 $closedPath = Join-Path $env:TEMP "demo_tickets_before.json"
-Invoke-WebRequest -Uri "$base/tickets" -OutFile $closedPath
+Invoke-WebRequest -Uri "$base/tickets" -Headers $reviewHeaders -OutFile $closedPath
 & $python (Join-Path $Root "scripts\score_run.py") absent $closedPath $ticketId
 if ($LASTEXITCODE -ne 0) {
     Stop-Api $api
@@ -93,6 +124,7 @@ $api = Start-Api
 $resumed = Send-Json Post "/runs/human" @{
     ticket_id = $ticketId
     approved  = $true
+    reviewer  = "demo"
 }
 $resumed | ConvertTo-Json -Depth 6
 if ($resumed.status -ne "resolved") {
@@ -101,7 +133,7 @@ if ($resumed.status -ne "resolved") {
 }
 
 $afterPath = Join-Path $env:TEMP "demo_tickets_after.json"
-Invoke-WebRequest -Uri "$base/tickets" -OutFile $afterPath
+Invoke-WebRequest -Uri "$base/tickets" -Headers $reviewHeaders -OutFile $afterPath
 & $python (Join-Path $Root "scripts\score_run.py") resolved $afterPath $ticketId
 if ($LASTEXITCODE -ne 0) {
     Stop-Api $api
@@ -117,6 +149,7 @@ $hello = Send-Json Post "/runs" @{
     }
     auto_approve = $false
 }
+$hello = Wait-Run $hello
 $hello | ConvertTo-Json -Depth 6
 $helloPath = Join-Path $env:TEMP "demo_hello.json"
 $hello | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $helloPath
@@ -128,7 +161,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if ($created.trace_id) {
     Write-Host "6. 节点追踪 $($created.trace_id)"
-    Invoke-RestMethod -Uri "$base/traces/$($created.trace_id)" | ConvertTo-Json -Depth 6
+    Invoke-RestMethod -Uri "$base/traces/$($created.trace_id)" -Headers $reviewHeaders | ConvertTo-Json -Depth 6
 }
 
 Stop-Api $api

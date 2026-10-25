@@ -42,6 +42,8 @@ class StubLLM:
         ticket: TicketIn,
         classification: Classification,
         kb_hits: list[dict[str, str]],
+        tool_calls: list[dict] | None = None,
+        history: list | None = None,
     ) -> DraftReply:
         citations = [h["id"] for h in kb_hits]
         if kb_hits:
@@ -66,6 +68,8 @@ class StubLLM:
         ticket: TicketIn,
         classification: Classification | None,
         tool_calls: list[dict],
+        kb_hits: list[dict] | None = None,
+        history: list | None = None,
     ) -> dict:
         return stub_next_action(ticket, classification, tool_calls)
 

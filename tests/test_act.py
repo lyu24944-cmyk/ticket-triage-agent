@@ -30,10 +30,10 @@ class _Scripted:
     def classify(self, ticket):
         return self._stub.classify(ticket)
 
-    def draft_reply(self, ticket, classification, kb_hits):
+    def draft_reply(self, ticket, classification, kb_hits, **_kwargs):
         return self._stub.draft_reply(ticket, classification, kb_hits)
 
-    def next_action(self, ticket, classification, tool_calls):
+    def next_action(self, ticket, classification, tool_calls, **_kwargs):
         if self._actions:
             return self._actions.pop(0)
         return {"action": "finish"}

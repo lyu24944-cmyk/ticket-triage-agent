@@ -10,6 +10,7 @@ import httpx
 
 from ticket_triage.config import settings
 from ticket_triage.llm.actions import ACT_SYSTEM, act_user_prompt, parse_action
+from ticket_triage.llm.context import classify_user, draft_user
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
 
 Complete = Callable[[str, str], str]
@@ -54,7 +55,7 @@ def _post(http: httpx.Client, url: str, **kwargs) -> httpx.Response:
 
 
 def _classify_prompt(ticket: TicketIn) -> str:
-    return f"工单主题：{ticket.subject}\n工单正文：{ticket.body}"
+    return classify_user(ticket)
 
 
 def _classification_from_payload(payload: dict) -> Classification:
@@ -82,19 +83,10 @@ def _draft_prompt(
     ticket: TicketIn,
     classification: Classification,
     kb_hits: list[dict[str, str]],
+    tool_calls: list[dict] | None = None,
+    history: list | None = None,
 ) -> str:
-    lines = [
-        f"工单主题：{ticket.subject}",
-        f"工单正文：{ticket.body}",
-        f"类别：{classification.category.value}，优先级：{classification.priority.value}",
-    ]
-    if kb_hits:
-        lines.append("可引用的知识库文档：")
-        for hit in kb_hits:
-            lines.append(f"- [{hit['id']}] {hit.get('title', '')}：{hit.get('body', '')}")
-    else:
-        lines.append("可引用的知识库文档：无")
-    return "\n".join(lines)
+    return draft_user(ticket, classification, kb_hits, tool_calls, history)
 
 
 def _parse_json(text: str) -> dict:
@@ -133,8 +125,13 @@ class ModelLLM:
         ticket: TicketIn,
         classification: Classification,
         kb_hits: list[dict[str, str]],
+        tool_calls: list[dict] | None = None,
+        history: list | None = None,
     ) -> DraftReply:
-        raw = self._complete(DRAFT_SYSTEM, _draft_prompt(ticket, classification, kb_hits))
+        raw = self._complete(
+            DRAFT_SYSTEM,
+            _draft_prompt(ticket, classification, kb_hits, tool_calls, history),
+        )
         payload = _parse_json(raw)
         body = str(payload.get("body") or "").strip()
         if not body:
@@ -150,8 +147,13 @@ class ModelLLM:
         ticket: TicketIn,
         classification: Classification | None,
         tool_calls: list[dict],
+        kb_hits: list[dict] | None = None,
+        history: list | None = None,
     ) -> dict:
-        raw = self._complete(ACT_SYSTEM, act_user_prompt(ticket, classification, tool_calls))
+        raw = self._complete(
+            ACT_SYSTEM,
+            act_user_prompt(ticket, classification, tool_calls, kb_hits, history),
+        )
         return parse_action(_parse_json(raw))
 
 

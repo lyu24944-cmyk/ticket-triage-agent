@@ -31,6 +31,7 @@ def runtime_db_path() -> Path:
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(runtime_db_path()), check_same_thread=False)
+    conn.execute("PRAGMA busy_timeout=2000")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS pending_runs (
@@ -48,6 +49,17 @@ def _connect() -> sqlite3.Connection:
             trace_id TEXT NOT NULL,
             state_json TEXT NOT NULL,
             closed_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS run_jobs (
+            trace_id TEXT PRIMARY KEY,
+            ticket_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            result_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         )
         """
     )
@@ -221,6 +233,16 @@ def load_closed(ticket_id: str) -> dict[str, Any] | None:
     return _load_value(json.loads(row[0]))
 
 
+def delete_closed(ticket_id: str) -> None:
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM closed_runs WHERE ticket_id = ?", (ticket_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def delete_pending(ticket_id: str) -> None:
     with _LOCK:
         conn = _connect()
@@ -250,6 +272,99 @@ def record_span(
                 """,
                 (trace_id, node, duration_ms, status, detail, now),
             )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def save_run(result: Any) -> None:
+    """保存一次 HTTP 运行的当前结果。运行中和结束后都写在这里，供轮询读取。"""
+    from ticket_triage.models import RunResult
+
+    if not isinstance(result, RunResult):
+        result = RunResult.model_validate(result)
+    if not result.trace_id:
+        raise ValueError("run result missing trace_id")
+    payload = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO run_jobs (trace_id, ticket_id, status, result_json, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(trace_id) DO UPDATE SET
+                    ticket_id = excluded.ticket_id,
+                    status = excluded.status,
+                    result_json = excluded.result_json,
+                    updated_at = excluded.updated_at
+                """,
+                (result.trace_id, result.ticket_id, result.status, payload, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def load_run(trace_id: str) -> Any | None:
+    """按 trace_id 读取运行结果。没有记录时返回 None。"""
+    from ticket_triage.models import RunResult
+
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT result_json FROM run_jobs WHERE trace_id = ?",
+                (trace_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+    if row is None:
+        return None
+    return RunResult.model_validate(json.loads(row[0]))
+
+
+def mark_interrupted_runs() -> int:
+    """进程退出后仍标成 running 的任务改为失败，避免客户端一直轮询。"""
+    from ticket_triage.models import RunResult
+
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _LOCK:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                "SELECT trace_id, ticket_id FROM run_jobs WHERE status = 'running'"
+            ).fetchall()
+            for trace_id, ticket_id in rows:
+                result = RunResult(
+                    ticket_id=ticket_id,
+                    status="failed",
+                    errors=["run_interrupted"],
+                    trace_id=trace_id,
+                )
+                payload = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+                conn.execute(
+                    """
+                    UPDATE run_jobs
+                    SET status = ?, result_json = ?, updated_at = ?
+                    WHERE trace_id = ?
+                    """,
+                    ("failed", payload, now, trace_id),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    return len(rows)
+
+
+def probe_writable() -> None:
+    """确认运行库可以写入。失败时抛出异常。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _health (id INTEGER PRIMARY KEY)")
+            conn.execute("INSERT INTO _health (id) VALUES (1) ON CONFLICT(id) DO NOTHING")
             conn.commit()
         finally:
             conn.close()

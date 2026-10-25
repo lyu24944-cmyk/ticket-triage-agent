@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ticket_triage.llm.context import act_user
 from ticket_triage.models import Category, Classification, TicketIn
 
 # 写状态不在此列。finalize 仍通过网关调用 update_ticket_status。
@@ -77,21 +78,16 @@ def act_user_prompt(
     ticket: TicketIn,
     classification: Classification | None,
     tool_calls: list[dict],
+    kb_hits: list[dict] | None = None,
+    history: list | None = None,
+    *,
+    budget: int | None = None,
 ) -> str:
-    category = classification.category.value if classification else "unknown"
-    lines = [
-        f"工单编号：{ticket.ticket_id}",
-        f"主题：{ticket.subject}",
-        f"正文：{ticket.body}",
-        f"类别：{category}",
-    ]
-    if tool_calls:
-        lines.append("已执行的动作（含失败原因，请改选或结束）：")
-        for call in tool_calls:
-            error = call.get("error") or ""
-            lines.append(
-                f"- {call.get('name')} ok={bool(call.get('ok'))} error={error}"
-            )
-    else:
-        lines.append("已执行的动作：无")
-    return "\n".join(lines)
+    return act_user(
+        ticket,
+        classification,
+        tool_calls,
+        kb_hits,
+        history,
+        budget=budget,
+    )

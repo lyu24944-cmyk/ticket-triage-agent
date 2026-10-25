@@ -51,6 +51,11 @@ def test_human_reject_escalates():
         )
     )
     result = resume_with_human(
-        HumanDecision(ticket_id="t-102", approved=False, note="needs senior review")
+        HumanDecision(
+            ticket_id="t-102",
+            approved=False,
+            reviewer="ada",
+            note="needs senior review",
+        )
     )
     assert result.status == "escalated"

@@ -23,6 +23,7 @@ def _db_path() -> Path:
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_db_path()), check_same_thread=False)
+    conn.execute("PRAGMA busy_timeout=2000")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS tickets (
@@ -110,7 +111,24 @@ def get_ticket_history(ticket_id: str) -> list[dict[str, Any]]:
             conn.close()
 
 
-def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -> dict[str, Any]:
+def probe_writable() -> None:
+    """确认工单库可以写入。失败时抛出异常。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _health (id INTEGER PRIMARY KEY)")
+            conn.execute("INSERT INTO _health (id) VALUES (1) ON CONFLICT(id) DO NOTHING")
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def update_ticket_status(
+    ticket_id: str,
+    status: str,
+    note: str | None = None,
+    reviewer: str | None = None,
+) -> dict[str, Any]:
     """更新工单状态并追加历史。"""
     with _LOCK:
         conn = _connect()
@@ -124,7 +142,10 @@ def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -
                 history = list(json.loads(row[0]))
             else:
                 history = []
-            history.append({"status": status, "note": note})
+            entry: dict[str, Any] = {"status": status, "note": note}
+            if reviewer:
+                entry["reviewer"] = reviewer
+            history.append(entry)
             conn.execute(
                 """
                 INSERT INTO tickets (ticket_id, status, subject, body, history_json)
@@ -143,23 +164,29 @@ def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -
 
 
 def seed_ticket(ticket_id: str, subject: str, body: str) -> None:
-    """初始化一条工单记录。"""
+    """第一次入库写 open。已有工单保持现状，不改状态、不覆盖历史。"""
     with _LOCK:
         conn = _connect()
         try:
             history = [{"status": "open", "note": f"已入库: {subject}"}]
             conn.execute(
                 """
-                INSERT INTO tickets (ticket_id, status, subject, body, history_json)
+                INSERT OR IGNORE INTO tickets (ticket_id, status, subject, body, history_json)
                 VALUES (?, 'open', ?, ?, ?)
-                ON CONFLICT(ticket_id) DO UPDATE SET
-                    subject = excluded.subject,
-                    body = excluded.body,
-                    status = 'open',
-                    history_json = excluded.history_json
                 """,
                 (ticket_id, subject, body, json.dumps(history, ensure_ascii=False)),
             )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def delete_ticket(ticket_id: str) -> None:
+    """删掉一张工单。演示脚本重跑固定编号时使用。"""
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM tickets WHERE ticket_id = ?", (ticket_id,))
             conn.commit()
         finally:
             conn.close()

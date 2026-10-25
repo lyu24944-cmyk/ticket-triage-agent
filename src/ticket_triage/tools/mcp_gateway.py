@@ -126,10 +126,15 @@ def get_ticket_history_mcp(ticket_id: str) -> list[dict[str, Any]]:
 
 
 def update_ticket_status_mcp(
-    ticket_id: str, status: str, note: str | None = None
+    ticket_id: str,
+    status: str,
+    note: str | None = None,
+    reviewer: str | None = None,
 ) -> dict[str, Any]:
     args: dict[str, Any] = {"ticket_id": ticket_id, "status": status}
     if note is not None:
         args["note"] = note
+    if reviewer:
+        args["reviewer"] = reviewer
     raw = call_mcp_tool("update_ticket_status", args)
     return raw if isinstance(raw, dict) else {"result": raw}

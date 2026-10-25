@@ -79,7 +79,13 @@ def act_node(state: TriageState) -> dict:
         action = stub_next_action(ticket, classification, calls)
     else:
         try:
-            action = llm.next_action(ticket, classification, calls)
+            action = llm.next_action(
+                ticket,
+                classification,
+                calls,
+                kb_hits=state.get("kb_hits"),
+                history=state.get("history"),
+            )
         except Exception as exc:  # noqa: BLE001 — 坏 JSON 或模型错误时改走 stub
             errors.append(f"act_model_failed: {exc}")
             use_stub = True
@@ -174,7 +180,13 @@ def draft_node(state: TriageState) -> dict:
         return {"errors": ["draft_without_classification"], "status": "failed"}
     kb_hits = state.get("kb_hits") or []
     try:
-        draft = llm.draft_reply(state["ticket"], classification, kb_hits)
+        draft = llm.draft_reply(
+            state["ticket"],
+            classification,
+            kb_hits,
+            tool_calls=state.get("tool_calls"),
+            history=state.get("history"),
+        )
     except Exception as exc:  # noqa: BLE001 — 模型失败时退回 stub 草稿，仍进人审
         draft = StubLLM().draft_reply(state["ticket"], classification, kb_hits)
         return {"draft": draft, "status": "drafted", "errors": [f"draft_model_failed: {exc}"]}
@@ -193,9 +205,15 @@ def finalize_node(state: TriageState) -> dict:
     ticket = state["ticket"]
     approved = state.get("human_approved")
     draft = state.get("draft")
+    reviewer = state.get("reviewer")
     if approved is False:
-        gateway.update_ticket_status(ticket.ticket_id, "escalated", note=state.get("human_edits"))
+        gateway.update_ticket_status(
+            ticket.ticket_id,
+            "escalated",
+            note=state.get("human_edits"),
+            reviewer=reviewer,
+        )
         return {"status": "escalated", "awaiting_human": False}
     body = state.get("human_edits") or (draft.body if draft else "")
-    gateway.update_ticket_status(ticket.ticket_id, "resolved", note=body[:200])
+    gateway.update_ticket_status(ticket.ticket_id, "resolved", note=body[:200], reviewer=reviewer)
     return {"status": "resolved", "awaiting_human": False}

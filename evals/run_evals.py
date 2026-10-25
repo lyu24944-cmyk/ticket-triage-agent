@@ -51,7 +51,16 @@ REPORT_PATH = Path(__file__).parent / "last_report.json"
 
 def main() -> int:
     # 40 条黄金集按 3 篇关键词文档编写。忽略 .env 里的 RAG_BASE_URL，保证和 CI 同一知识库。
+    # 每次评测用空库。已结案的工单不能靠再提交来清空历史。
     settings.rag_base_url = None
+    eval_dir = ROOT / ".data" / "evals"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("tickets.db", "runtime.db"):
+        path = eval_dir / name
+        if path.exists():
+            path.unlink()
+    settings.ticket_db_path = str(eval_dir / "tickets.db")
+    settings.runtime_db_path = str(eval_dir / "runtime.db")
     rows = []
     latencies = []
     case_results = []

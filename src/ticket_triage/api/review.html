@@ -37,6 +37,12 @@
   </header>
   <main>
     <section>
+      <h2>审核身份</h2>
+      <label>审核密钥</label>
+      <input id="review-key" type="password" autocomplete="off" />
+      <label>审核人</label>
+      <input id="reviewer" maxlength="64" />
+      <p id="auth-error" class="error"></p>
       <h2>待审</h2>
       <ul id="queue"></ul>
       <p id="empty" class="empty">没有待审工单。</p>
@@ -62,6 +68,42 @@
     const closedEmpty = document.getElementById("closed-empty");
     const detail = document.getElementById("detail");
     const STATUS = { resolved: "已结案", escalated: "已升级", pending: "重新送审", open: "新建" };
+    const keyInput = document.getElementById("review-key");
+    const reviewerInput = document.getElementById("reviewer");
+    keyInput.value = sessionStorage.getItem("review_api_key") || "";
+    reviewerInput.value = sessionStorage.getItem("reviewer_name") || "";
+    keyInput.addEventListener("change", () => {
+      sessionStorage.setItem("review_api_key", keyInput.value.trim());
+      load();
+      loadClosed();
+    });
+    reviewerInput.addEventListener("change", () => {
+      sessionStorage.setItem("reviewer_name", reviewerInput.value.trim());
+    });
+
+    function reviewerName() {
+      const name = reviewerInput.value.trim();
+      sessionStorage.setItem("reviewer_name", name);
+      return name;
+    }
+
+    function authHeaders(extra) {
+      const headers = Object.assign({}, extra || {});
+      const key = keyInput.value.trim();
+      if (key) headers["X-API-Key"] = key;
+      return headers;
+    }
+
+    function showAuth(body) {
+      const code = (body.errors || [])[0];
+      document.getElementById("auth-error").textContent = code === "review_auth_not_configured"
+        ? "服务还没有配置 REVIEW_API_KEY。"
+        : "审核密钥不正确。";
+    }
+
+    function clearAuth() {
+      document.getElementById("auth-error").textContent = "";
+    }
     let selected = null;
     let selectedKind = null;
     let items = [];
@@ -74,7 +116,15 @@
     }
 
     async function load() {
-      const response = await fetch("/runs/pending");
+      const response = await fetch("/runs/pending", { headers: authHeaders() });
+      if (response.status === 401) {
+        showAuth(await response.json());
+        items = [];
+        queue.innerHTML = "";
+        empty.hidden = false;
+        return;
+      }
+      clearAuth();
       items = await response.json();
       queue.innerHTML = "";
       empty.hidden = items.length > 0;
@@ -94,7 +144,15 @@
     }
 
     async function loadClosed() {
-      const response = await fetch("/tickets");
+      const response = await fetch("/tickets", { headers: authHeaders() });
+      if (response.status === 401) {
+        showAuth(await response.json());
+        closedItems = [];
+        closedList.innerHTML = "";
+        closedEmpty.hidden = false;
+        return;
+      }
+      clearAuth();
       closedItems = await response.json();
       closedList.innerHTML = "";
       closedEmpty.hidden = closedItems.length > 0;
@@ -113,9 +171,10 @@
       selectedKind = "closed";
       const item = closedItems.find((row) => row.ticket_id === ticketId);
       if (!item) return;
-      const history = (item.history || []).map((entry) =>
-        `${esc(STATUS[entry.status] || entry.status)}${entry.note ? " · " + esc(entry.note) : ""}`
-      ).join("\n");
+      const history = (item.history || []).map((entry) => {
+        const who = entry.reviewer ? " · " + esc(entry.reviewer) : "";
+        return `${esc(STATUS[entry.status] || entry.status)}${who}${entry.note ? " · " + esc(entry.note) : ""}`;
+      }).join("\n");
       detail.innerHTML = `
         <h2>${esc(item.subject)}</h2>
         <p class="meta">${esc(item.ticket_id)} · ${esc(STATUS[item.status] || item.status)}</p>
@@ -133,8 +192,21 @@
     }
 
     async function sendBack(ticketId) {
-      const response = await fetch("/tickets/" + encodeURIComponent(ticketId) + "/reopen", { method: "POST" });
+      const reviewer = reviewerName();
+      if (!reviewer) {
+        document.getElementById("action-error").textContent = "请先填写审核人。";
+        return;
+      }
+      const response = await fetch("/tickets/" + encodeURIComponent(ticketId) + "/reopen", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ reviewer })
+      });
       const result = await response.json();
+      if (response.status === 401) {
+        showAuth(result);
+        return;
+      }
       if (!response.ok || !result.awaiting_human) {
         document.getElementById("action-error").textContent = (result.errors || ["重新送审失败"]).join(" ");
         return;
@@ -149,7 +221,8 @@
       selectedKind = "pending";
       const item = items.find((row) => row.ticket_id === ticketId);
       if (!item) return;
-      const trace = await fetch("/traces/" + encodeURIComponent(item.trace_id)).then((r) => r.json());
+      const traceResponse = await fetch("/traces/" + encodeURIComponent(item.trace_id), { headers: authHeaders() });
+      const trace = traceResponse.ok ? await traceResponse.json() : { spans: [] };
       const spans = (trace.spans || []).map((span) =>
         `${esc(span.node)} · ${esc(span.status)} · ${Number(span.duration_ms).toFixed(1)} ms`
       ).join("\n");
@@ -201,13 +274,22 @@
     }
 
     async function decide(approved) {
+      const reviewer = reviewerName();
+      if (!reviewer) {
+        document.getElementById("action-error").textContent = "请先填写审核人。";
+        return;
+      }
       const edits = document.getElementById("edits").value.trim();
       const response = await fetch("/runs/human", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticket_id: selected, approved, edits: edits || null })
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ ticket_id: selected, approved, reviewer, edits: edits || null })
       });
       const result = await response.json();
+      if (response.status === 401) {
+        showAuth(result);
+        return;
+      }
       if (!response.ok || result.status === "not_found") {
         document.getElementById("action-error").textContent = (result.errors || ["提交失败"]).join(" ");
         return;
@@ -217,6 +299,18 @@
       selectedKind = null;
       await load();
       await loadClosed();
+    }
+
+    async function waitForRun(traceId) {
+      detail.innerHTML = "<h2>处理中</h2><p class=\"meta\">正在分类和起草。</p>";
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        const response = await fetch("/runs/" + encodeURIComponent(traceId));
+        if (!response.ok) return null;
+        const body = await response.json();
+        if (body.status !== "running") return body;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      return null;
     }
 
     document.getElementById("create").onclick = async () => {
@@ -234,13 +328,25 @@
           }
         })
       });
+      const created = await response.json().catch(() => ({}));
       if (!response.ok) {
-        error.textContent = "创建失败";
+        error.textContent = (created.errors || ["创建失败"]).join(" ");
         return;
       }
-      const created = await response.json();
+      let settled = created;
+      if (created.status === "running") {
+        settled = await waitForRun(created.trace_id);
+        if (!settled) {
+          error.textContent = "运行没有在时限内结束";
+          return;
+        }
+      }
+      if (settled.status === "failed") {
+        error.textContent = (settled.errors || ["运行失败"]).join(" ");
+        return;
+      }
       await load();
-      if (created.awaiting_human) show(created.ticket_id);
+      if (settled.awaiting_human) show(settled.ticket_id);
     };
 
     load();

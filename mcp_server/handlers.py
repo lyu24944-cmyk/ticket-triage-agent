@@ -23,8 +23,19 @@ def handle_get_ticket_history(ticket_id: str) -> list[dict[str, Any]]:
     return get_ticket_history(ticket_id)
 
 
+def _reviewer_for_history(reviewer: str | None) -> str | None:
+    if reviewer is None:
+        return None
+    text = "".join(char for char in str(reviewer).strip() if ord(char) >= 32 and char not in "\r\n")
+    text = text[:64]
+    return text or None
+
+
 def handle_update_ticket_status(
-    ticket_id: str, status: str, note: str | None = None
+    ticket_id: str,
+    status: str,
+    note: str | None = None,
+    reviewer: str | None = None,
 ) -> dict[str, Any]:
     """写操作：更新状态（白名单 + 审计日志）。"""
     if status not in ALLOWED_STATUSES:
@@ -35,11 +46,14 @@ def handle_update_ticket_status(
             sorted(ALLOWED_STATUSES),
         )
         return {"error": "status_not_allowed", "allowed": sorted(ALLOWED_STATUSES)}
-    result = update_ticket_status(ticket_id, status, note)
+    result = update_ticket_status(
+        ticket_id, status, note, reviewer=_reviewer_for_history(reviewer)
+    )
     logger.info(
-        "写操作 update_ticket_status: ticket_id=%s status=%s note=%s",
+        "写操作 update_ticket_status: ticket_id=%s status=%s reviewer=%s note=%s",
         ticket_id,
         status,
+        _reviewer_for_history(reviewer) or "-",
         (note or "")[:120],
     )
     return result

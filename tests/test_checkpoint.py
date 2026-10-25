@@ -20,7 +20,7 @@ def test_hitl_survives_process_restart():
 
     forget_memory()
 
-    done = resume_with_human(HumanDecision(ticket_id="p5-1", approved=True))
+    done = resume_with_human(HumanDecision(ticket_id="p5-1", approved=True, reviewer="ada"))
     assert done.status == "resolved"
     assert done.trace_id == created.trace_id
 

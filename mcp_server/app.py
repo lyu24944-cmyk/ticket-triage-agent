@@ -36,9 +36,16 @@ def get_ticket_history(ticket_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def update_ticket_status(ticket_id: str, status: str, note: str | None = None) -> dict[str, Any]:
+def update_ticket_status(
+    ticket_id: str,
+    status: str,
+    note: str | None = None,
+    reviewer: str | None = None,
+) -> dict[str, Any]:
     """更新工单状态。写操作；status 仅允许 open/resolved/escalated/pending。"""
-    return handle_update_ticket_status(ticket_id=ticket_id, status=status, note=note)
+    return handle_update_ticket_status(
+        ticket_id=ticket_id, status=status, note=note, reviewer=reviewer
+    )
 
 
 def run_stdio() -> None:
