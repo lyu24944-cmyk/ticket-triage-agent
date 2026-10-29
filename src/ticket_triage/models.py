@@ -46,13 +46,14 @@ def clean_reviewer(value: str) -> str:
 
 
 class TicketIn(BaseModel):
-    """入站工单。"""
+    """入站工单。tenant_id 以鉴权为准，body 里伪造无效。"""
 
     ticket_id: str = Field(min_length=1, max_length=64, pattern=TICKET_ID_PATTERN)
     subject: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=4000)
     customer_email: str | None = Field(default=None, max_length=254)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tenant_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("subject")
     @classmethod
@@ -126,10 +127,9 @@ class DraftReply(BaseModel):
 
 
 class RunRequest(BaseModel):
-    """发起一次分流运行。"""
+    """发起一次分流运行。是否人审由服务端 REQUIRE_HITL 决定。"""
 
     ticket: TicketIn
-    auto_approve: bool = False
 
 
 class RunResult(BaseModel):
@@ -146,17 +146,19 @@ class RunResult(BaseModel):
 
 
 class HumanDecision(BaseModel):
-    """人工审核决策。"""
+    """人工审核决策。审核人身份以 JWT sub 为准；body 里的 reviewer 可忽略。"""
 
     ticket_id: str = Field(min_length=1, max_length=64, pattern=TICKET_ID_PATTERN)
     approved: bool
-    reviewer: str = Field(min_length=1, max_length=64)
+    reviewer: str | None = Field(default=None, max_length=64)
     edits: str | None = Field(default=None, max_length=4000)
     note: str | None = Field(default=None, max_length=500)
 
     @field_validator("reviewer")
     @classmethod
-    def reviewer_name(cls, value: str) -> str:
+    def reviewer_name(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
         return clean_reviewer(value)
 
     @field_validator("edits", "note")
@@ -168,11 +170,25 @@ class HumanDecision(BaseModel):
 
 
 class ReopenRequest(BaseModel):
-    """把已处理工单送回待审。"""
+    """把已处理工单送回待审。审核人来自 JWT；body.reviewer 可忽略。"""
 
-    reviewer: str = Field(min_length=1, max_length=64)
+    reviewer: str | None = Field(default=None, max_length=64)
 
     @field_validator("reviewer")
     @classmethod
-    def reviewer_name(cls, value: str) -> str:
+    def reviewer_name(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        return clean_reviewer(value)
+
+
+class ReviewTokenRequest(BaseModel):
+    """用审核引导密钥换取人员短时 JWT。"""
+
+    sub: str = Field(min_length=1, max_length=64)
+    ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
+
+    @field_validator("sub")
+    @classmethod
+    def subject_name(cls, value: str) -> str:
         return clean_reviewer(value)

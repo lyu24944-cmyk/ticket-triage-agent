@@ -7,11 +7,10 @@ from ticket_triage.models import Category, Classification, Priority, RunRequest,
 from ticket_triage.tools import gateway
 
 
-def _run(ticket_id: str, subject: str, body: str, *, auto_approve: bool = True):
+def _run(ticket_id: str, subject: str, body: str):
     return run_triage(
         RunRequest(
             ticket=TicketIn(ticket_id=ticket_id, subject=subject, body=body),
-            auto_approve=auto_approve,
         )
     )
 
@@ -47,7 +46,7 @@ def test_other_ticket_finishes_without_search(monkeypatch) -> None:
         raise AssertionError("other 不应检索")
 
     monkeypatch.setattr("ticket_triage.graph.nodes.gateway.search_knowledge_base", boom)
-    result = _run("act-other", "Hello", "Just saying hi", auto_approve=False)
+    result = _run("act-other", "Hello", "Just saying hi")
     assert result.status == "awaiting_human"
     assert _names(result) == ["finish"]
     assert result.draft is not None
@@ -137,7 +136,7 @@ def test_status_write_is_refused_before_review(monkeypatch) -> None:
         * 6
     )
     monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: scripted)
-    result = _run("act-write", "Urgent refund", "need a refund", auto_approve=False)
+    result = _run("act-write", "Urgent refund", "need a refund")
     assert writes["n"] == 0
     assert result.status == "awaiting_human"
     assert len(result.tool_calls) == 4
@@ -162,7 +161,7 @@ def test_history_of_another_ticket_is_refused(monkeypatch) -> None:
         ]
     )
     monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: scripted)
-    result = _run("act-cross", "Hello", "Just saying hi", auto_approve=False)
+    result = _run("act-cross", "Hello", "Just saying hi")
     assert result.tool_calls[0]["error"] == "ticket_id_mismatch"
     assert _names(result)[-1] == "finish"
     assert "act_model_failed" not in " ".join(result.errors)

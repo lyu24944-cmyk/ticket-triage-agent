@@ -24,3 +24,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\demo_hitl.ps1
 ## 2026-10-21 的 stub 记录
 
 同一脚本当时还没有强制 `local`，分类走关键词 stub。`trace_id` 为 `c9356308-7df2-4c95-a1ca-38eb62ce49e8`。`over_budget` 为 false，合计约 18.8 ms。
+
+## 2026-10-27 备份与杀进程演练
+
+按 `docs/P5_RUNBOOK.md`「备份和恢复演练」在本地实跑。模型是 `.env` 的 `openai` / `deepseek-flash`，`RAG_BASE_URL=local`。不改架构。
+
+### 备份 / 覆盖
+
+| 项 | 值 |
+|----|----|
+| 日期 | 2026-10-27 15:59:52 +08:00 |
+| `GET /health` | `ok=true`，`checks.queue` active=0 limit=32 workers=2 |
+| ticket_id | `drill-backup-155954` |
+| trace_id | `552cd769-5b16-4265-9ae9-4b95873a4e22` |
+| 备份目录 | `.data/backups/drill-20261027-160022`（`tickets.db`、`runtime.db`；未拷 `instance.lock`） |
+
+1. 提交后退到 `awaiting_human`。停掉唯一 API 进程，复制两个库。
+2. 再启动：同一 `trace_id` 仍是 `awaiting_human`；`GET /runs/pending` 当时共 11 张待审。
+3. 再停进程，用备份覆盖 `.data/tickets.db` 与 `.data/runtime.db` 后启动：同一张单仍是 `awaiting_human`。`schema_migrations` 为 `[1, 2]`。
+
+### 杀进程 / 续跑
+
+| 项 | 值 |
+|----|----|
+| ticket_id | `drill-kill-160027` |
+| trace_id | `f4633848-21b0-4141-a028-6df8ca9c86ab` |
+| 杀掉时 status | `running` |
+| 杀掉时检查点 | `next_node=ingest`，`trace_spans` 为空（首个节点尚未落盘） |
+| 重启后 status | `awaiting_human`（不是 `failed` / `run_interrupted`） |
+| 追踪合计 | 约 19683 ms，`over_budget=true` |
+
+重启后 `GET /traces/f4633848-21b0-4141-a028-6df8ca9c86ab` 的节点顺序：
+
+`ingest` → `classify` → `act` → `act` → `act` → `draft` → `hitl_gate`
+
+- **因中断而重跑的节点：** 杀掉时停在 `ingest` 且没有已完成 span，重启后从 `ingest` 整段再跑；没有「杀掉前已完成、杀掉后又出现第二份」的节点。
+- **`act` 出现 3 次：** 是同一次续跑里工具循环的三步（两次 `acting`、一次 `enriched`），不是杀进程导致的重复 span。

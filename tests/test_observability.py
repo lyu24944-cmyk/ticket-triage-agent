@@ -21,10 +21,9 @@ def test_missing_keys_do_not_open_a_trace(monkeypatch) -> None:
     result = run_triage(
         RunRequest(
             ticket=TicketIn(ticket_id="lf-off", subject="Hello", body="Just saying hi"),
-            auto_approve=True,
         )
     )
-    assert result.status == "resolved"
+    assert result.status == "awaiting_human"
     assert called["n"] == 0
     score_eval_case(result.trace_id, {"category_accuracy": 1.0})
     assert called["n"] == 0

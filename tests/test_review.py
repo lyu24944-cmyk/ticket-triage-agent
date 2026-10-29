@@ -3,14 +3,19 @@
 from fastapi.testclient import TestClient
 
 from ticket_triage.api.main import app
+from ticket_triage.auth_jwt import mint_review_token
 
 
-def test_pending_lists_ticket_until_approved(review_headers, finish_run) -> None:
+def _bearer(sub: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {mint_review_token(sub)}"}
+
+
+def test_pending_lists_ticket_until_approved(service_headers, review_headers, finish_run) -> None:
     client = TestClient(app)
     created = finish_run(client, client.post(
         "/runs",
+        headers=service_headers,
         json={
-            "auto_approve": False,
             "ticket": {
                 "ticket_id": "review-1",
                 "subject": "紧急退款",
@@ -37,11 +42,10 @@ def test_pending_lists_ticket_until_approved(review_headers, finish_run) -> None
 
     page = client.get("/review")
     assert page.status_code == 200
+    # Vite SPA：壳在 index.html，文案在 /review/assets/*.js
+    assert 'id="root"' in page.text
+    assert "/review/assets/" in page.text
     assert "工单审核台" in page.text
-    assert "本次工具调用" in page.text
-    assert "审核密钥" in page.text
-    assert "审核人" in page.text
-    assert "处理中" in page.text
 
     decided = client.post(
         "/runs/human",
@@ -60,12 +64,51 @@ def test_pending_lists_ticket_until_approved(review_headers, finish_run) -> None
     assert stored[0]["history"][-1]["reviewer"] == "ada"
 
 
-def test_reopen_keeps_escalation_and_returns_to_queue(review_headers, finish_run) -> None:
+def test_poll_follows_human_decision_and_reopen(service_headers, review_headers, finish_run) -> None:
+    client = TestClient(app)
+    created = finish_run(
+        client,
+        client.post(
+            "/runs",
+            headers=service_headers,
+            json={
+                "ticket": {
+                    "ticket_id": "review-poll",
+                    "subject": "紧急退款",
+                    "body": "我被重复扣款，需要退款",
+                },
+            },
+        ),
+    )
+    trace_id = created.json()["trace_id"]
+    decided = client.post(
+        "/runs/human",
+        headers=review_headers,
+        json={"ticket_id": "review-poll", "approved": True, "reviewer": "ada"},
+    )
+    assert decided.json()["status"] == "resolved"
+    polled = client.get(f"/runs/{trace_id}", headers=service_headers)
+    assert polled.status_code == 200
+    assert polled.json()["status"] == "resolved"
+    assert polled.json()["awaiting_human"] is False
+
+    reopened = client.post(
+        "/tickets/review-poll/reopen",
+        headers=_bearer("bea"),
+        json={},
+    )
+    assert reopened.status_code == 200
+    again = client.get(f"/runs/{reopened.json()['trace_id']}", headers=service_headers)
+    assert again.json()["status"] == "awaiting_human"
+    assert again.json()["awaiting_human"] is True
+
+
+def test_reopen_keeps_escalation_and_returns_to_queue(service_headers, review_headers, finish_run) -> None:
     client = TestClient(app)
     created = finish_run(client, client.post(
         "/runs",
+        headers=service_headers,
         json={
-            "auto_approve": False,
             "ticket": {
                 "ticket_id": "review-2",
                 "subject": "紧急退款",
@@ -82,8 +125,8 @@ def test_reopen_keeps_escalation_and_returns_to_queue(review_headers, finish_run
 
     reopened = client.post(
         "/tickets/review-2/reopen",
-        headers=review_headers,
-        json={"reviewer": "bea"},
+        headers=_bearer("bea"),
+        json={},
     )
     assert reopened.status_code == 200
     assert reopened.json()["awaiting_human"] is True
@@ -115,7 +158,7 @@ def test_reopen_without_saved_draft_still_keeps_history(review_headers) -> None:
     assert history == ["open", "escalated", "pending"]
 
 
-def test_pending_exposes_model_fallbacks(monkeypatch, review_headers, finish_run) -> None:
+def test_pending_exposes_model_fallbacks(monkeypatch, service_headers, review_headers, finish_run) -> None:
     from ticket_triage.llm import ModelLLM
 
     monkeypatch.setattr(
@@ -127,8 +170,8 @@ def test_pending_exposes_model_fallbacks(monkeypatch, review_headers, finish_run
         client,
         client.post(
             "/runs",
+            headers=service_headers,
             json={
-                "auto_approve": False,
                 "ticket": {
                     "ticket_id": "review-fallback",
                     "subject": "紧急退款",
@@ -144,6 +187,14 @@ def test_pending_exposes_model_fallbacks(monkeypatch, review_headers, finish_run
     )
     assert any(error.startswith("classify_model_failed") for error in item["errors"])
     assert any(error.startswith("draft_model_failed") for error in item["errors"])
-    page = client.get("/review").text
-    assert "分类模型失败，当前分类由关键词规则生成。" in page
-    assert "草稿模型失败，当前草稿由 stub 生成。" in page
+    # 前端把上述错误码渲染成中文警告；文案在构建后的 JS 包里
+    from pathlib import Path
+
+    from ticket_triage.api.main import _REVIEW_STATIC
+
+    assets = _REVIEW_STATIC / "assets"
+    js_blob = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore") for p in assets.glob("*.js")
+    ) if assets.is_dir() else ""
+    assert "分类模型失败" in js_blob
+    assert "草稿模型失败" in js_blob

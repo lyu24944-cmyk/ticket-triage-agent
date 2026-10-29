@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from ticket_triage.config import settings
 from ticket_triage.models import Classification, TicketIn
+from ticket_triage.privacy import history_for_model, kb_hits_for_model, ticket_for_model
 
 
 @dataclass
@@ -168,12 +169,13 @@ def _budget(budget: int | None) -> int | None:
 
 
 def classify_user(ticket: TicketIn, *, budget: int | None = None) -> str:
+    safe = ticket_for_model(ticket)
     block = _Block(
         kind="ticket",
         text=_ticket_text(
             [
-                f"工单主题：{ticket.subject}",
-                f"工单正文：{ticket.body}",
+                f"工单主题：{safe.subject}",
+                f"工单正文：{safe.body}",
             ]
         ),
     )
@@ -189,23 +191,26 @@ def act_user(
     *,
     budget: int | None = None,
 ) -> str:
+    safe = ticket_for_model(ticket)
+    safe_history = history_for_model(history)
+    safe_hits = kb_hits_for_model(kb_hits)
     category = classification.category.value if classification else "unknown"
     blocks = [
         _Block(
             kind="ticket",
             text=_ticket_text(
                 [
-                    f"工单编号：{ticket.ticket_id}",
-                    f"主题：{ticket.subject}",
-                    f"正文：{ticket.body}",
+                    f"工单编号：{safe.ticket_id}",
+                    f"主题：{safe.subject}",
+                    f"正文：{safe.body}",
                     f"类别：{category}",
                 ]
             ),
         )
     ]
-    for line in _tool_lines(tool_calls, history):
+    for line in _tool_lines(tool_calls, safe_history):
         blocks.append(_Block(kind="tool", text=line))
-    for hit in kb_hits or []:
+    for hit in safe_hits:
         blocks.append(
             _Block(
                 kind="citation",
@@ -228,13 +233,16 @@ def draft_user(
     *,
     budget: int | None = None,
 ) -> str:
+    safe = ticket_for_model(ticket)
+    safe_history = history_for_model(history)
+    safe_hits = kb_hits_for_model(kb_hits)
     blocks = [
         _Block(
             kind="ticket",
             text=_ticket_text(
                 [
-                    f"工单主题：{ticket.subject}",
-                    f"工单正文：{ticket.body}",
+                    f"工单主题：{safe.subject}",
+                    f"工单正文：{safe.body}",
                     (
                         f"类别：{classification.category.value}，"
                         f"优先级：{classification.priority.value}"
@@ -243,10 +251,10 @@ def draft_user(
             ),
         )
     ]
-    for line in _tool_lines(tool_calls, history):
+    for line in _tool_lines(tool_calls, safe_history):
         blocks.append(_Block(kind="tool", text=line))
-    if kb_hits:
-        for hit in kb_hits:
+    if safe_hits:
+        for hit in safe_hits:
             blocks.append(
                 _Block(
                     kind="citation",

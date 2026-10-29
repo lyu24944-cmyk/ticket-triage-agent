@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ticket_triage.config import settings
+from ticket_triage.tenants import DEFAULT_TENANT_ID
 from ticket_triage.tools import kb as kb_mod
 from ticket_triage.tools import tickets as tickets_mod
 
@@ -21,12 +22,16 @@ def search_knowledge_base(query: str, limit: int = 3) -> list[dict[str, str]]:
     return kb_mod.search_knowledge_base(query, limit=limit)
 
 
-def get_ticket_history(ticket_id: str) -> list[dict[str, Any]]:
+def get_ticket_history(
+    ticket_id: str,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> list[dict[str, Any]]:
     if settings.use_mcp:
         from ticket_triage.tools.mcp_gateway import get_ticket_history_mcp
 
         return get_ticket_history_mcp(ticket_id)
-    return tickets_mod.get_ticket_history(ticket_id)
+    return tickets_mod.get_ticket_history(ticket_id, tenant_id=tenant_id)
 
 
 def update_ticket_status(
@@ -34,29 +39,56 @@ def update_ticket_status(
     status: str,
     note: str | None = None,
     reviewer: str | None = None,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
 ) -> dict[str, Any]:
     if settings.use_mcp:
         from ticket_triage.tools.mcp_gateway import update_ticket_status_mcp
 
         return update_ticket_status_mcp(ticket_id, status, note, reviewer=reviewer)
-    return tickets_mod.update_ticket_status(ticket_id, status, note, reviewer=reviewer)
+    return tickets_mod.update_ticket_status(
+        ticket_id, status, note, reviewer=reviewer, tenant_id=tenant_id
+    )
 
 
-def get_ticket(ticket_id: str) -> dict[str, Any] | None:
+def get_ticket(
+    ticket_id: str,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any] | None:
     """读取工单。与入库一样直接读共享 SQLite。"""
-    return tickets_mod.get_ticket(ticket_id)
+    return tickets_mod.get_ticket(ticket_id, tenant_id=tenant_id)
 
 
-def list_tickets(statuses: list[str] | None = None) -> list[dict[str, Any]]:
+def list_tickets(
+    statuses: list[str] | None = None,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    q: str | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> list[dict[str, Any]]:
     """列出工单。直接读共享 SQLite。"""
-    return tickets_mod.list_tickets(statuses)
+    return tickets_mod.list_tickets(
+        statuses, tenant_id=tenant_id, q=q, limit=limit, cursor=cursor
+    )
 
 
-def delete_ticket(ticket_id: str) -> None:
+def delete_ticket(
+    ticket_id: str,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> None:
     """从共享工单库删除一张工单。"""
-    tickets_mod.delete_ticket(ticket_id)
+    tickets_mod.delete_ticket(ticket_id, tenant_id=tenant_id)
 
 
-def seed_ticket(ticket_id: str, subject: str, body: str) -> None:
+def seed_ticket(
+    ticket_id: str,
+    subject: str,
+    body: str,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> None:
     # 入库始终写共享 SQLite，供 MCP 子进程读取
-    tickets_mod.seed_ticket(ticket_id, subject, body)
+    tickets_mod.seed_ticket(ticket_id, subject, body, tenant_id=tenant_id)

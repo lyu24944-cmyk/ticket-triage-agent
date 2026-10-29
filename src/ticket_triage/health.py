@@ -7,6 +7,7 @@ import httpx
 from ticket_triage import __version__
 from ticket_triage.config import settings
 from ticket_triage.process_lock import holds_lock
+from ticket_triage.runtime import active_job_count
 from ticket_triage.runtime import probe_writable as probe_runtime
 from ticket_triage.tools.tickets import probe_writable as probe_tickets
 
@@ -39,6 +40,12 @@ def readiness() -> tuple[int, dict]:
         "tickets_db": _db_check(probe_tickets),
         "rag": _rag_check(),
         "single_process": {"ok": holds_lock()},
+        "queue": {
+            "ok": True,
+            "active": active_job_count(),
+            "limit": max(1, int(settings.run_queue_limit)),
+            "workers": max(1, int(settings.run_workers)),
+        },
     }
     ok = all(bool(item.get("ok")) for item in checks.values())
     return (200 if ok else 503), {"ok": ok, "version": __version__, "checks": checks}

@@ -11,8 +11,13 @@ from ticket_triage.tools import gateway
 
 def ingest_node(state: TriageState) -> dict:
     """入库工单。"""
+    from ticket_triage.tenants import DEFAULT_TENANT_ID
+
     ticket = state["ticket"]
-    gateway.seed_ticket(ticket.ticket_id, ticket.subject, ticket.body)
+    tenant_id = getattr(ticket, "tenant_id", None) or DEFAULT_TENANT_ID
+    gateway.seed_ticket(
+        ticket.ticket_id, ticket.subject, ticket.body, tenant_id=tenant_id
+    )
     return {"status": "ingested", "errors": [], "tool_retries": 0}
 
 
@@ -143,7 +148,12 @@ def act_node(state: TriageState) -> dict:
                 "tool_retries": 0,
                 "errors": errors,
             }
-        history = gateway.get_ticket_history(arguments["ticket_id"])
+        from ticket_triage.tenants import DEFAULT_TENANT_ID
+
+        history = gateway.get_ticket_history(
+            arguments["ticket_id"],
+            tenant_id=getattr(ticket, "tenant_id", None) or DEFAULT_TENANT_ID,
+        )
         calls.append({"name": name, "arguments": arguments, "ok": True, "error": None})
         _trace_tool(
             name,
@@ -193,27 +203,54 @@ def draft_node(state: TriageState) -> dict:
     return {"draft": draft, "status": "drafted"}
 
 
-def hitl_gate_node(state: TriageState) -> dict:
-    """人工审核关卡：未自动通过则暂停。"""
-    if state.get("auto_approve") or not settings.require_hitl:
+def hitl_gate_node(_state: TriageState) -> dict:
+    """人工审核关卡。只有服务端 REQUIRE_HITL=false 时直接通过。"""
+    if not settings.require_hitl:
         return {"awaiting_human": False, "human_approved": True, "status": "auto_approved"}
     return {"awaiting_human": True, "status": "awaiting_human"}
 
 
 def finalize_node(state: TriageState) -> dict:
-    """根据人审结果结案或升级。"""
+    """根据人审结果结案或升级；结案后触发出站回调。"""
+    from ticket_triage.integrations.callback import notify_closure
+    from ticket_triage.tenants import DEFAULT_TENANT_ID
+
     ticket = state["ticket"]
+    tenant_id = getattr(ticket, "tenant_id", None) or DEFAULT_TENANT_ID
     approved = state.get("human_approved")
     draft = state.get("draft")
     reviewer = state.get("reviewer")
+    target = "escalated" if approved is False else "resolved"
+    current = gateway.get_ticket(ticket.ticket_id, tenant_id=tenant_id)
+    if current is not None and current["status"] == target:
+        return {"status": target, "awaiting_human": False}
     if approved is False:
         gateway.update_ticket_status(
             ticket.ticket_id,
             "escalated",
             note=state.get("human_edits"),
             reviewer=reviewer,
+            tenant_id=tenant_id,
+        )
+        notify_closure(
+            tenant_id=tenant_id,
+            ticket_id=ticket.ticket_id,
+            status="escalated",
+            trace_id=state.get("trace_id"),
         )
         return {"status": "escalated", "awaiting_human": False}
     body = state.get("human_edits") or (draft.body if draft else "")
-    gateway.update_ticket_status(ticket.ticket_id, "resolved", note=body[:200], reviewer=reviewer)
+    gateway.update_ticket_status(
+        ticket.ticket_id,
+        "resolved",
+        note=body[:200],
+        reviewer=reviewer,
+        tenant_id=tenant_id,
+    )
+    notify_closure(
+        tenant_id=tenant_id,
+        ticket_id=ticket.ticket_id,
+        status="resolved",
+        trace_id=state.get("trace_id"),
+    )
     return {"status": "resolved", "awaiting_human": False}

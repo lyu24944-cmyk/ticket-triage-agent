@@ -10,31 +10,10 @@ import httpx
 
 from ticket_triage.config import settings
 from ticket_triage.llm.actions import ACT_SYSTEM, act_user_prompt, parse_action
-from ticket_triage.llm.context import classify_user, draft_user
+from ticket_triage.llm.prompts import CLASSIFY_SYSTEM, DRAFT_SYSTEM, classify_prompt, draft_prompt
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
 
 Complete = Callable[[str, str], str]
-
-CLASSIFY_SYSTEM = (
-    "你是客服工单分类助手。只根据工单主题和正文判断类别与优先级。"
-    "只输出一个 JSON 对象，格式为 "
-    '{"category": "billing", "priority": "low", "rationale": "一句话理由"}。'
-    "category 只能是 billing、technical、account、other 之一："
-    "账单、扣款、退款是 billing；登录、密码、故障是 technical；注销账号是 account；其余是 other。"
-    "priority 只能是 low、medium、high、critical 之一："
-    "紧急、无法使用、无法登录、cannot login、重复扣款用 high；"
-    "账单、扣款、退款、密码、登录、注销这类本职请求，不紧急时用 medium；"
-    "category 为 other 时一律用 low，包括问候和知识库范围外的询问。"
-)
-
-DRAFT_SYSTEM = (
-    "你是客服工单的回复起草助手。只能依据用户消息里给出的知识库文档作答，"
-    "不得编造政策、数字或文档编号。"
-    "只输出一个 JSON 对象，格式为 "
-    '{"body": "回复正文", "citations": ["文档编号"]}。'
-    "citations 只能填写给出的文档编号；没有给出文档时 citations 必须是空列表，"
-    "正文只说明会继续跟进，不要引用任何政策。"
-)
 
 _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-5",
@@ -55,7 +34,7 @@ def _post(http: httpx.Client, url: str, **kwargs) -> httpx.Response:
 
 
 def _classify_prompt(ticket: TicketIn) -> str:
-    return classify_user(ticket)
+    return classify_prompt(ticket)
 
 
 def _classification_from_payload(payload: dict) -> Classification:
@@ -86,7 +65,7 @@ def _draft_prompt(
     tool_calls: list[dict] | None = None,
     history: list | None = None,
 ) -> str:
-    return draft_user(ticket, classification, kb_hits, tool_calls, history)
+    return draft_prompt(ticket, classification, kb_hits, tool_calls, history)
 
 
 def _parse_json(text: str) -> dict:
@@ -117,7 +96,9 @@ class ModelLLM:
         self._complete = complete
 
     def classify(self, ticket: TicketIn) -> Classification:
-        raw = self._complete(CLASSIFY_SYSTEM, _classify_prompt(ticket))
+        from ticket_triage.privacy import ticket_for_model
+
+        raw = self._complete(CLASSIFY_SYSTEM, _classify_prompt(ticket_for_model(ticket)))
         return _classification_from_payload(_parse_json(raw))
 
     def draft_reply(
@@ -128,9 +109,12 @@ class ModelLLM:
         tool_calls: list[dict] | None = None,
         history: list | None = None,
     ) -> DraftReply:
+        from ticket_triage.privacy import ticket_for_model
+
+        safe = ticket_for_model(ticket)
         raw = self._complete(
             DRAFT_SYSTEM,
-            _draft_prompt(ticket, classification, kb_hits, tool_calls, history),
+            _draft_prompt(safe, classification, kb_hits, tool_calls, history),
         )
         payload = _parse_json(raw)
         body = str(payload.get("body") or "").strip()
@@ -150,9 +134,13 @@ class ModelLLM:
         kb_hits: list[dict] | None = None,
         history: list | None = None,
     ) -> dict:
+        from ticket_triage.privacy import ticket_for_model
+
         raw = self._complete(
             ACT_SYSTEM,
-            act_user_prompt(ticket, classification, tool_calls, kb_hits, history),
+            act_user_prompt(
+                ticket_for_model(ticket), classification, tool_calls, kb_hits, history
+            ),
         )
         return parse_action(_parse_json(raw))
 

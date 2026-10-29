@@ -18,5 +18,10 @@ jobs:
         run: pip install -e ".[dev]"
       - name: 单元测试
         run: pytest -q
+      # stub + 当前 PROMPT_PIN（默认 current）。不要在此跑 compare_prompt_versions（会打两次模型）。
       - name: 黄金评测门禁
         run: python evals/run_evals.py
+        env:
+          PROMPT_PIN: current
+      - name: 红队集门禁（注入/越权）
+        run: python evals/run_redteam.py

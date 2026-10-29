@@ -22,7 +22,6 @@ def test_chinese_refund_cites_billing_article():
                 subject="紧急退款",
                 body="我被重复扣款，需要退款",
             ),
-            auto_approve=True,
         )
     )
     assert result.draft is not None
@@ -37,7 +36,6 @@ def test_smalltalk_has_no_citation():
                 subject="Hello",
                 body="Just saying hi",
             ),
-            auto_approve=True,
         )
     )
     assert result.draft is not None

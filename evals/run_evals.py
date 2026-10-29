@@ -77,7 +77,6 @@ def main() -> int:
                     subject=case["subject"],
                     body=case["body"],
                 ),
-                auto_approve=True,
             )
         )
         latencies.append((time.perf_counter() - t0) * 1000)

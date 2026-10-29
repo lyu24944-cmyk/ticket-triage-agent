@@ -50,7 +50,6 @@ def test_use_mcp_enrich_matches_inprocess_shape(monkeypatch):
                 subject="Urgent refund request",
                 body="I was charged twice, need a refund",
             ),
-            auto_approve=True,
         )
     )
     assert result.status == "resolved"
@@ -89,7 +88,6 @@ def test_enrich_soft_fallback_on_mcp_timeout(monkeypatch):
                 subject="Urgent refund request",
                 body="I was charged twice, need a refund",
             ),
-            auto_approve=True,
         )
     )
     assert result.status == "resolved"

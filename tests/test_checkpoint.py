@@ -12,7 +12,6 @@ def test_hitl_survives_process_restart():
                 subject="紧急退款",
                 body="我被重复扣款，需要退款",
             ),
-            auto_approve=False,
         )
     )
     assert created.status == "awaiting_human"

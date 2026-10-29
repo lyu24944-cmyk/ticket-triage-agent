@@ -14,6 +14,7 @@ dependencies = [
   "httpx>=0.27.0",
   "mcp>=1.0.0",
   "langfuse>=5.0.4",
+  "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,7 +37,7 @@ where = ["src", "."]
 include = ["ticket_triage*", "mcp_server*"]
 
 [tool.setuptools.package-data]
-ticket_triage = ["api/*.html"]
+ticket_triage = ["api/*.html", "api/static/review/**"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

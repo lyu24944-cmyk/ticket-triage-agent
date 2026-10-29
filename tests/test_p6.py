@@ -23,10 +23,9 @@ def test_refund_ticket_cites_rag_document(monkeypatch) -> None:
                 subject="Urgent refund request",
                 body="I was charged twice, need a refund",
             ),
-            auto_approve=True,
         )
     )
-    assert result.status == "resolved"
+    assert result.status == "awaiting_human"
     assert result.draft is not None
     assert result.draft.citations == ["kb-billing-refund"]
 
@@ -41,7 +40,6 @@ def test_smalltalk_has_empty_rag_citations(monkeypatch) -> None:
     result = run_triage(
         RunRequest(
             ticket=TicketIn(ticket_id="p6-hi", subject="Hello", body="Just saying hi"),
-            auto_approve=True,
         )
     )
     assert result.draft is not None
@@ -63,10 +61,9 @@ def test_rag_outage_soft_degrades_to_draft(monkeypatch) -> None:
                 subject="Urgent refund request",
                 body="I was charged twice, need a refund",
             ),
-            auto_approve=True,
         )
     )
-    assert result.status == "resolved"
+    assert result.status == "awaiting_human"
     assert result.draft is not None
     assert result.draft.citations == []
     assert any(item.startswith("enrich_failed") for item in result.errors)

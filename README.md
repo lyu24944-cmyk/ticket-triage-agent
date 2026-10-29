@@ -4,7 +4,8 @@
 
 - 锁定决策：见 [docs/DECISIONS.md](docs/DECISIONS.md)
 - P2 MCP 用法：见 [docs/MCP.md](docs/MCP.md)
-- P2/P3 验收：见 [docs/P2_MCP_P3_EVALS.md](docs/P2_MCP_P3_EVALS.md)
+- P2/评测 P3 验收：见 [docs/P2_MCP_P3_EVALS.md](docs/P2_MCP_P3_EVALS.md)
+- 集成与产品化 P3：见 [docs/P3_INTEGRATION.md](docs/P3_INTEGRATION.md)
 - 第一周清单：见 [docs/WEEK1_CHECKLIST.md](docs/WEEK1_CHECKLIST.md)
 - 作品集路线：见 [docs/PORTFOLIO_ROADMAP.md](docs/PORTFOLIO_ROADMAP.md)
 - P6 检索改调问答服务：见 [docs/P6.md](docs/P6.md)
@@ -22,7 +23,7 @@ flowchart TD
   act --> draft
   draft --> hitl[hitl_gate]
   hitl -->|awaiting_human| pause[(SQLite pending_runs)]
-  hitl -->|auto_approve| finalize
+  hitl -->|REQUIRE_HITL=false| finalize
   human[POST /runs/human] --> pause
   human --> finalize
   finalize --> done[resolved 或 escalated]
@@ -60,7 +61,7 @@ act / finalize 工具面：
 | `classify` | 优先级 + 类别（有 Key 时由模型判断，失败退回关键词） |
 | `act` | 在白名单里选择检索或查历史；`other` 的 stub 不检索；失败可软降级重试 |
 | `draft` | 回复草稿 + 引用 |
-| `hitl_gate` | 除非 `auto_approve`，否则暂停等人审 |
+| `hitl_gate` | `REQUIRE_HITL=true` 时暂停等人审；设为 false 时由服务端直接结案 |
 | `finalize` | 结案或升级（经网关写状态） |
 
 ## 快速开始
@@ -78,23 +79,31 @@ uvicorn ticket_triage.api.main:app --reload --port 8000
 发起一次运行。接口立刻返回 202 和 `trace_id`，分类和起草在后台进行：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -d "{\"ticket\":{\"ticket_id\":\"t-1\",\"subject\":\"Urgent refund\",\"body\":\"Charged twice\"},\"auto_approve\":false}"
-curl http://127.0.0.1:8000/runs/<trace_id>
+curl -X POST http://127.0.0.1:8000/runs -H "Content-Type: application/json" -H "X-API-Key: service-key" -d "{\"ticket\":{\"ticket_id\":\"t-1\",\"subject\":\"Urgent refund\",\"body\":\"Charged twice\"}}"
+curl http://127.0.0.1:8000/runs/<trace_id> -H "X-API-Key: service-key"
 ```
 
-人工通过 / 驳回。先设置 `REVIEW_API_KEY`，请求带上同一把密钥和审核人：
+人工通过 / 驳回。`SERVICE_API_KEY` 是机器身份；`REVIEW_API_KEY` 只用来换人员短时 JWT；人审必须 `Authorization: Bearer`（身份取 JWT `sub`）。见 [docs/P1_IDENTITY.md](docs/P1_IDENTITY.md)。
 
 ```bash
-curl -X POST http://127.0.0.1:8000/runs/human -H "Content-Type: application/json" -H "X-API-Key: change-me" -d "{\"ticket_id\":\"t-1\",\"approved\":true,\"reviewer\":\"ada\"}"
+curl -X POST http://127.0.0.1:8000/auth/review/token -H "Content-Type: application/json" -H "X-API-Key: review-key" -d "{\"sub\":\"ada\"}"
+curl -X POST http://127.0.0.1:8000/runs/human -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"ticket_id\":\"t-1\",\"approved\":true}"
 ```
 
 停进程后再恢复的完整演示：`powershell -File .\scripts\demo_hitl.ps1`，记录见 [docs/DEMO.md](docs/DEMO.md)。
 
-审核台：启动 API 后打开 http://127.0.0.1:8000/review 。页面先填写 `REVIEW_API_KEY` 和审核人，才能看草稿、通过、驳回或重新送审。审核人会写进状态历史。已处理工单列在左侧，可以重新送审，原来的结案或升级记录会留在历史里。
+审核台是 Vite + React（`web/`），构建后由 API 托管在 `/review`，只调用 `/v1`（含待审/已处理游标分页）。首次或改前端后：
 
-服务只跑一个进程。`uvicorn` 使用 `--workers 1`，启动时会锁住数据目录里的 `instance.lock`。第二个进程拿不到这把锁，会直接退出。待审状态仍在 SQLite，不要用多个 worker 或两个容器写同一份库。
+```powershell
+powershell -File .\scripts\build_review.ps1
+# 或：cd web; npm install; npm run build
+```
 
-`POST /runs` 不在请求里等模型。返回 202 之后，最多 `RUN_WORKERS` 个线程同时做分类、选工具和起草。审核台和 `GET /runs/{trace_id}` 轮询到 `awaiting_human` 或 `failed`。同一张单还在跑时，再次提交返回同一个 `trace_id`。进程重启后，没跑完的运行变成 `failed` / `run_interrupted`。人工通过和驳回仍然当场完成。
+然后打开 http://127.0.0.1:8000/review ，填引导密钥与审核人后点「登录领取令牌」。新建工单仍用 `SERVICE_API_KEY`。开发联调可用 `cd web; npm run dev`（代理到 `:8000`）。
+
+服务只跑一个进程，按单实例容量上线，不要开多副本。`uvicorn` 使用 `--workers 1`，启动时会锁住数据目录里的 `instance.lock`。第二个进程拿不到这把锁，会直接退出。工单库和运行库都是这份目录里的 SQLite，不要用多个 worker 或两个容器写同一份库。
+
+`POST /runs` 不在请求里等模型。返回 202 之后，任务写在 `run_jobs`。最多 `RUN_WORKERS`（默认 2）张单同时在执行，其余按受理顺序排队。已受理未结束的单超过 `RUN_QUEUE_LIMIT`（默认 32）时，新工单返回 429，错误码 `queue_full`。同一张还在队列里的单再次提交，返回原来的 `trace_id`，不占新名额。审核台和 `GET /runs/{trace_id}` 轮询到 `awaiting_human` 或 `failed`；排队时状态仍是 `running`。进程退出后，已完成的节点不重跑，从下一节点继续。没有请求正文的旧记录才会变成 `failed` / `run_interrupted`。人工通过和驳回仍然当场完成，同一个 `trace_id` 随后轮询到 `resolved` 或 `escalated`；重新送审后轮询回到 `awaiting_human`。备份和恢复见 [docs/P5_RUNBOOK.md](docs/P5_RUNBOOK.md)。
 
 ### 用真实模型分类和起草
 
@@ -106,9 +115,13 @@ $env:ANTHROPIC_API_KEY="..."    # openai 则设 OPENAI_API_KEY，可选 OPENAI_B
 python evals/run_evals.py
 ```
 
-不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。
+不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。提示词用 `PROMPT_PIN=current|previous` 在 v3 / v2 间切换；对比两版见 [docs/PROMPTS.md](docs/PROMPTS.md)。CI 只跑当前销钉，不在流水线里打两次外网模型。
 
 配了 Langfuse 时，每次运行会多送一条 `ticket-triage` trace。版本号（例如 `openai-act-v3` 或 `stub-act-v1`）写在 trace 的 version 和 tag 上，延迟记成 `latency_ms`，有没有退回 stub 记成 `no_model_fallback`。黄金集还会把类别、优先级、引用和工具选择的得分贴到同一条 trace 上。不配 Key 时只保留原来的 SQLite 节点追踪。
+
+值班先搜结构化日志（含 `alert_code` / `model_failed`）和 `GET /health` 的队列字段；`OPS_LOG_JSON` 可进集中日志，`ALERT_WEBHOOK_URL` 可告警，见 [docs/ONCALL.md](docs/ONCALL.md)。不上完整 APM；这些日志不进 CI 合并门槛。
+
+工单正文进 SQLite，默认保留 `TICKET_RETENTION_DAYS`（90）天；送模型前会脱敏。可进提示词的字段、过期删哪里、审核人与 `SERVICE_API_KEY` 分离，见 [docs/DATA.md](docs/DATA.md)。
 
 ```powershell
 $env:LANGFUSE_PUBLIC_KEY="pk-lf-..."
@@ -138,8 +151,15 @@ python -m mcp_server
 - 仅 3 个工具：`search_knowledge_base`、`get_ticket_history`、`update_ticket_status`
 - **禁止**：shell、任意文件读写、任意 SQL
 - 写操作 `status` 白名单：`open|resolved|escalated|pending`，并打审计日志。人审和重新送审会把审核人记进历史
-- 待审列表、追踪、`POST /runs/human` 和重新送审需要请求头 `X-API-Key`，值是 `REVIEW_API_KEY`。没配置密钥时这些接口返回 401
-- 工单编号最长 64，只允许字母、数字、`.`、`_`、`-`。主题最长 200，正文最长 4000。请求体超过 64KB 返回 413
+- `POST /runs` 和 `GET /runs/{trace_id}` 需要 `X-API-Key: SERVICE_API_KEY`（机器身份）
+- 人审相关接口需要人员 JWT（`Authorization: Bearer`）；`REVIEW_API_KEY` 仅用于 `POST /auth/review/token`。无令牌返回 `review_token_missing`
+- 读草稿 / 通过 / 驳回 / 重新送审写入 `audit_events`；DSAR：`GET|DELETE /privacy/tickets/{id}`
+- 生产用 `*_FILE` 挂 Secret Manager / K8s secret；轮换窗口用 `*_PREVIOUS`。密钥不进镜像、不进日志，见 [docs/SECRETS.md](docs/SECRETS.md)
+- 生产经网关 TLS 终结；API 不直接对公网。速率限制与 64000 字节 body 上限在网关统一，应用再拦一道，见 [docs/GATEWAY.md](docs/GATEWAY.md)
+- CI：`security.yml` 做 pip-audit、Trivy（CRITICAL/HIGH）与非 root（uid 10001）门禁，见 [docs/SECURITY_CI.md](docs/SECURITY_CI.md)
+- 冷备份：停 API 后 `scripts/backup_sqlite.py`（WAL 收口 + 可选异地）；RPO≤24h / RTO≤1h，见 [docs/BACKUP.md](docs/BACKUP.md)
+- 是否跳过人审只看 `REQUIRE_HITL`。请求体里的 `auto_approve` 会被忽略
+- 工单编号最长 64，只允许字母、数字、`.`、`_`、`-`。主题最长 200，正文最长 4000。请求体超过 64000 字节返回 413
 - MCP 调用默认 5 秒超时；超时记 `enrich_failed` 后软降级起草
 - `GET /health` 检查运行库和工单库是否可写，并确认本进程持有单进程锁。设置了 `RAG_BASE_URL` 时还会请求问答服务的 `/health`；失败返回 503
 - Docker 镜像以 uid 10001 的 `appuser` 运行，并带 HEALTHCHECK。挂载数据卷时，目录需要对这个用户可写。镜像里包含 `mcp_server`，`USE_MCP=true` 时可以在同一镜像里拉起工具进程
@@ -162,9 +182,12 @@ python -m mcp_server
 | 无待审运行 | HTTP 404，`no_pending_run` |
 | 工单不存在或尚未结案就重新送审 | HTTP 404 `ticket_not_found`，或 HTTP 409 `not_closed` / `already_pending` |
 | 同一张单再次提交 | 还在后台跑就返回同一个 `trace_id`；已经待审就返回原来的草稿，不再跑一遍；已结案或已升级则 HTTP 409 `already_closed`，历史保持原样 |
+| 受理密钥缺失或错误 | HTTP 401，`service_auth_not_configured` 或 `service_auth_failed` |
 | 审核密钥缺失或错误 | HTTP 401，`review_auth_not_configured` 或 `review_auth_failed` |
+| 请求体带 `auto_approve` | 忽略。`REQUIRE_HITL=true` 时仍然进人审 |
 | 后台运行失败 | `GET /runs/{trace_id}` 的 status 为 `failed`，`errors` 为 `internal_error`，带同一个 `trace_id`，不返回异常原文 |
-| 进程在运行中退出 | 下次启动把该次运行标成 `failed` / `run_interrupted` |
+| 队列已满 | HTTP 429，`queue_full`。已经在队列里的同一张单仍返回原来的 `trace_id` |
+| 进程在运行中退出 | 下次启动从最后完成的节点继续。没有请求正文的旧记录才是 `failed` / `run_interrupted` |
 | 人审写状态失败 | HTTP 500，`internal_error`，响应里带 `trace_id` |
 
 ## 简历话术模板

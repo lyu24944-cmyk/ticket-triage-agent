@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from ticket_triage.config import settings
@@ -16,11 +17,10 @@ _CLIENT_KEY: tuple[str, str, str] | None = None
 def prompt_version() -> str:
     """和评测报告用同一套版本号，方便在 Langfuse 里按版本筛。"""
     from ticket_triage.llm import ModelLLM, get_llm
+    from ticket_triage.llm.prompts import prompt_tag
 
     provider = (settings.llm_provider or "stub").lower()
-    if isinstance(get_llm(), ModelLLM):
-        return f"{provider}-act-v3"
-    return "stub-act-v1"
+    return prompt_tag(provider=provider, uses_model=isinstance(get_llm(), ModelLLM))
 
 
 def langfuse_enabled() -> bool:
@@ -51,6 +51,61 @@ def _callback_handler() -> Any:
     from langfuse.langchain import CallbackHandler
 
     return CallbackHandler()
+
+
+def trace_run(trace_id: str, ticket: Any, work: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """执行一段已经落盘的步骤。配了 Langfuse 时记成和整图运行同一条 trace。"""
+    if not langfuse_enabled():
+        return work()
+    try:
+        prepared = _prepare_trace(trace_id)
+    except Exception:
+        logger.exception("langfuse setup failed")
+        return work()
+    import time
+
+    client, version, lf_trace_id = prepared
+    started = time.perf_counter()
+    try:
+        return _emit_work(client, version, lf_trace_id, ticket, work, started)
+    finally:
+        try:
+            client.flush()
+        except Exception:
+            logger.exception("langfuse flush failed")
+
+
+def _emit_work(
+    client: Any,
+    version: str,
+    lf_trace_id: str,
+    ticket: Any,
+    work: Callable[[], dict[str, Any]],
+    started: float,
+) -> dict[str, Any]:
+    import time
+
+    from langfuse import propagate_attributes
+
+    with client.start_as_current_observation(
+        as_type="agent",
+        name="ticket-triage",
+        trace_context={"trace_id": lf_trace_id},
+        input={"ticket_id": ticket.ticket_id, "subject": ticket.subject},
+        metadata={"prompt_version": version},
+        version=version,
+    ) as span:
+        with propagate_attributes(
+            trace_name="ticket-triage",
+            version=version,
+            tags=[version],
+            metadata={"prompt_version": version},
+            session_id=ticket.ticket_id,
+            environment="development",
+        ):
+            final = work()
+        _score_run(span, final, (time.perf_counter() - started) * 1000)
+    return final
 
 
 def run_observed(graph: Any, initial: dict[str, Any], trace_id: str, ticket: Any) -> dict[str, Any]:

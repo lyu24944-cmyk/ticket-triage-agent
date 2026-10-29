@@ -1,5 +1,6 @@
 """工作流单元测试（无需 API Key）。"""
 
+from ticket_triage.config import settings
 from ticket_triage.graph.workflow import resume_with_human, run_triage
 from ticket_triage.models import HumanDecision, RunRequest, TicketIn
 
@@ -12,7 +13,6 @@ def test_billing_ticket_awaits_human():
             subject="Urgent refund request",
             body="I was charged twice, need a refund now.",
         ),
-        auto_approve=False,
     )
     result = run_triage(req)
     assert result.status == "awaiting_human"
@@ -23,15 +23,15 @@ def test_billing_ticket_awaits_human():
     assert result.draft.citations
 
 
-def test_auto_approve_resolves():
-    """自动通过时应直接结案。"""
+def test_server_policy_can_skip_human_review(monkeypatch):
+    """只有服务端关掉人审时才直接结案。"""
+    monkeypatch.setattr(settings, "require_hitl", False)
     req = RunRequest(
         ticket=TicketIn(
             ticket_id="t-101",
             subject="Password reset help",
             body="I cannot login and need a password reset.",
         ),
-        auto_approve=True,
     )
     result = run_triage(req)
     assert result.status == "resolved"
@@ -47,7 +47,6 @@ def test_human_reject_escalates():
                 subject="Billing issue",
                 body="Wrong invoice charge",
             ),
-            auto_approve=False,
         )
     )
     result = resume_with_human(

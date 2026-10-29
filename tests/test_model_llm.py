@@ -67,7 +67,7 @@ def test_classify_failure_falls_back_and_draft_still_uses_model(monkeypatch) -> 
 
     monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: ModelLLM(complete))
     result = run_triage(
-        RunRequest(ticket=TICKET.model_copy(update={"ticket_id": "m-cls"}), auto_approve=True)
+        RunRequest(ticket=TICKET.model_copy(update={"ticket_id": "m-cls"}))
     )
     assert result.classification is not None
     assert result.classification.category == Category.billing
@@ -112,8 +112,8 @@ def test_model_failure_falls_back_to_stub_draft(monkeypatch) -> None:
         return "not json"
 
     monkeypatch.setattr("ticket_triage.graph.nodes.get_llm", lambda: ModelLLM(broken))
-    result = run_triage(RunRequest(ticket=TICKET.model_copy(update={"ticket_id": "m-2"}), auto_approve=True))
-    assert result.status == "resolved"
+    result = run_triage(RunRequest(ticket=TICKET.model_copy(update={"ticket_id": "m-2"})))
+    assert result.status == "awaiting_human"
     assert result.draft is not None
     assert result.draft.citations == ["kb-billing-refund"]
     assert any(item.startswith("draft_model_failed") for item in result.errors)

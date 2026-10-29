@@ -27,7 +27,27 @@ if (-not $env:REVIEW_API_KEY) {
     }
 }
 if (-not $env:REVIEW_API_KEY) { $env:REVIEW_API_KEY = "demo-review-key" }
-$reviewHeaders = @{ "X-API-Key" = $env:REVIEW_API_KEY }
+if (-not $env:SERVICE_API_KEY) {
+    $envFile = Join-Path $Root ".env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile) {
+            if ($line -match '^\s*SERVICE_API_KEY=(.*)$') {
+                $env:SERVICE_API_KEY = $Matches[1].Trim().Trim('"').Trim("'")
+                break
+            }
+        }
+    }
+}
+if (-not $env:SERVICE_API_KEY) { $env:SERVICE_API_KEY = "demo-service-key" }
+$serviceHeaders = @{ "X-API-Key" = $env:SERVICE_API_KEY }
+$mintHeaders = @{ "X-API-Key" = $env:REVIEW_API_KEY; "Content-Type" = "application/json" }
+$reviewHeaders = $null
+
+function Get-ReviewHeaders {
+    $tokenBody = @{ sub = "demo-reviewer" } | ConvertTo-Json
+    $minted = Invoke-RestMethod -Uri "$base/auth/review/token" -Method Post -Headers $mintHeaders -Body $tokenBody
+    return @{ "Authorization" = "Bearer $($minted.access_token)"; "Content-Type" = "application/json" }
+}
 
 function Wait-Health {
     for ($i = 0; $i -lt 30; $i++) {
@@ -54,7 +74,7 @@ function Start-Api {
 function Wait-Run($created) {
     if ($created.status -ne "running") { return $created }
     for ($i = 0; $i -lt 240; $i++) {
-        $current = Invoke-RestMethod -Uri "$base/runs/$($created.trace_id)"
+        $current = Invoke-RestMethod -Uri "$base/runs/$($created.trace_id)" -Headers $serviceHeaders
         if ($current.status -eq "failed") {
             throw "运行失败: $($current.errors -join ', ')"
         }
@@ -64,10 +84,10 @@ function Wait-Run($created) {
     throw "运行超时 $($created.trace_id)"
 }
 
-function Send-Json($method, $path, $payload) {
+function Send-Json($method, $path, $payload, $headers) {
     $json = $payload | ConvertTo-Json -Depth 5 -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-    return Invoke-RestMethod -Method $method -Uri "$base$path" -Headers $reviewHeaders -ContentType "application/json; charset=utf-8" -Body $bytes
+    return Invoke-RestMethod -Method $method -Uri "$base$path" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $bytes
 }
 
 function Stop-Api($proc) {
@@ -85,6 +105,7 @@ if ($LASTEXITCODE -ne 0) { throw "清理演示工单失败" }
 
 Write-Host "1. 启动 API"
 $api = Start-Api
+$reviewHeaders = Get-ReviewHeaders
 
 Write-Host "2. 创建工单 $ticketId ，应停在 awaiting_human"
 $created = Send-Json Post "/runs" @{
@@ -93,8 +114,7 @@ $created = Send-Json Post "/runs" @{
         subject   = "紧急退款"
         body      = "我被重复扣款，需要退款"
     }
-    auto_approve = $false
-}
+} $serviceHeaders
 $created = Wait-Run $created
 $created | ConvertTo-Json -Depth 6
 if ($created.status -ne "awaiting_human") {
@@ -121,11 +141,11 @@ Stop-Api $api
 
 Write-Host "4. 重新启动 API，用同一个 ticket_id 人工通过"
 $api = Start-Api
+$reviewHeaders = Get-ReviewHeaders
 $resumed = Send-Json Post "/runs/human" @{
     ticket_id = $ticketId
     approved  = $true
-    reviewer  = "demo"
-}
+} $reviewHeaders
 $resumed | ConvertTo-Json -Depth 6
 if ($resumed.status -ne "resolved") {
     Stop-Api $api
@@ -147,8 +167,7 @@ $hello = Send-Json Post "/runs" @{
         subject   = "Hello"
         body      = "Just saying hi"
     }
-    auto_approve = $false
-}
+} $serviceHeaders
 $hello = Wait-Run $hello
 $hello | ConvertTo-Json -Depth 6
 $helloPath = Join-Path $env:TEMP "demo_hello.json"

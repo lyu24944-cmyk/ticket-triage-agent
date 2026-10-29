@@ -16,3 +16,9 @@ htmlcov/
 *.log
 .data/
 evals/last_report.json
+evals/shadow_report.json
+evals/prompt_compare.json
+web/node_modules/
+web/dist/
+evals/redteam_report.json
+web/node_modules/

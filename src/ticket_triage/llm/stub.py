@@ -7,6 +7,7 @@ import logging
 from ticket_triage.config import settings
 from ticket_triage.llm.actions import stub_next_action
 from ticket_triage.models import Category, Classification, DraftReply, Priority, TicketIn
+from ticket_triage.privacy import ticket_for_model
 
 logger = logging.getLogger("ticket_triage.llm")
 
@@ -15,7 +16,8 @@ class StubLLM:
     """基于关键词的启发式分类与起草（仅用于本地/CI）。"""
 
     def classify(self, ticket: TicketIn) -> Classification:
-        text = f"{ticket.subject} {ticket.body}".lower()
+        safe = ticket_for_model(ticket)
+        text = f"{safe.subject} {safe.body}".lower()
         if any(w in text for w in ("refund", "charge", "invoice", "billing", "付款", "退款")):
             category = Category.billing
             priority = Priority.high if "urgent" in text or "紧急" in text else Priority.medium
@@ -45,17 +47,18 @@ class StubLLM:
         tool_calls: list[dict] | None = None,
         history: list | None = None,
     ) -> DraftReply:
+        safe = ticket_for_model(ticket)
         citations = [h["id"] for h in kb_hits]
         if kb_hits:
             body = (
-                f"感谢联系客服，关于「{ticket.subject}」。"
+                f"感谢联系客服，关于「{safe.subject}」。"
                 f"根据文档（{', '.join(citations)}）：{kb_hits[0]['body']}"
                 "如需更多帮助请回复本工单。"
             )
             confidence = 0.75
         else:
             body = (
-                f"感谢联系客服，关于「{ticket.subject}」。"
+                f"感谢联系客服，关于「{safe.subject}」。"
                 "我们正在处理您的请求，稍后回复。"
             )
             confidence = 0.4
@@ -71,7 +74,7 @@ class StubLLM:
         kb_hits: list[dict] | None = None,
         history: list | None = None,
     ) -> dict:
-        return stub_next_action(ticket, classification, tool_calls)
+        return stub_next_action(ticket_for_model(ticket), classification, tool_calls)
 
 
 def get_llm():

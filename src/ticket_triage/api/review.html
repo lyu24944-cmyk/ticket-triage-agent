@@ -38,11 +38,21 @@
   <main>
     <section>
       <h2>审核身份</h2>
-      <label>审核密钥</label>
-      <input id="review-key" type="password" autocomplete="off" />
-      <label>审核人</label>
-      <input id="reviewer" maxlength="64" />
+      <p class="meta" id="auth-mode-meta">正在读取鉴权模式…</p>
+      <div id="mint-panel">
+        <label>审核引导密钥（换 JWT）</label>
+        <input id="review-key" type="password" autocomplete="off" />
+        <label>审核人（JWT sub）</label>
+        <input id="reviewer" maxlength="64" />
+        <button class="quiet" id="login" type="button">登录领取令牌</button>
+      </div>
+      <div id="oidc-panel" hidden>
+        <label>IdP 访问令牌（Bearer）</label>
+        <input id="oidc-token" type="password" autocomplete="off" placeholder="粘贴 IdP 签发的 access_token" />
+        <button class="quiet" id="oidc-login" type="button">使用 IdP 令牌</button>
+      </div>
       <p id="auth-error" class="error"></p>
+      <p class="meta" id="token-meta"></p>
       <h2>待审</h2>
       <ul id="queue"></ul>
       <p id="empty" class="empty">没有待审工单。</p>
@@ -50,6 +60,8 @@
       <ul id="closed"></ul>
       <p id="closed-empty" class="empty">没有已处理工单。</p>
       <h2>新建工单</h2>
+      <label>受理密钥</label>
+      <input id="service-key" type="password" autocomplete="off" />
       <label>主题</label>
       <input id="subject" value="紧急退款" />
       <label>正文</label>
@@ -69,17 +81,60 @@
     const detail = document.getElementById("detail");
     const STATUS = { resolved: "已结案", escalated: "已升级", pending: "重新送审", open: "新建" };
     const keyInput = document.getElementById("review-key");
+    const serviceInput = document.getElementById("service-key");
     const reviewerInput = document.getElementById("reviewer");
+    const oidcTokenInput = document.getElementById("oidc-token");
+    const mintPanel = document.getElementById("mint-panel");
+    const oidcPanel = document.getElementById("oidc-panel");
     keyInput.value = sessionStorage.getItem("review_api_key") || "";
+    serviceInput.value = sessionStorage.getItem("service_api_key") || "";
     reviewerInput.value = sessionStorage.getItem("reviewer_name") || "";
+    oidcTokenInput.value = sessionStorage.getItem("review_access_token") || "";
+    let reviewToken = sessionStorage.getItem("review_access_token") || "";
+    let authMode = "mint";
     keyInput.addEventListener("change", () => {
       sessionStorage.setItem("review_api_key", keyInput.value.trim());
-      load();
-      loadClosed();
     });
     reviewerInput.addEventListener("change", () => {
       sessionStorage.setItem("reviewer_name", reviewerInput.value.trim());
     });
+    serviceInput.addEventListener("change", () => {
+      sessionStorage.setItem("service_api_key", serviceInput.value.trim());
+    });
+
+    async function loadAuthMode() {
+      try {
+        const response = await fetch("/auth/review/mode");
+        const body = await response.json().catch(() => ({}));
+        authMode = body.mode === "oidc" ? "oidc" : "mint";
+      } catch (_) {
+        authMode = "mint";
+      }
+      mintPanel.hidden = authMode === "oidc";
+      oidcPanel.hidden = authMode !== "oidc";
+      const meta = document.getElementById("auth-mode-meta");
+      if (authMode === "oidc") {
+        meta.textContent = "OIDC 已开启：mint 关闭，请粘贴 IdP 令牌。无有效令牌不能人审。";
+      } else {
+        meta.textContent = "本地 mint：用审核引导密钥换短时人员 JWT。";
+      }
+    }
+    loadAuthMode();
+
+    function serviceHeaders() {
+      const headers = { "Content-Type": "application/json" };
+      const key = serviceInput.value.trim();
+      sessionStorage.setItem("service_api_key", key);
+      if (key) headers["X-API-Key"] = key;
+      return headers;
+    }
+
+    function serviceError(body) {
+      const code = (body.errors || [])[0];
+      if (code === "service_auth_not_configured") return "服务还没有配置 SERVICE_API_KEY。";
+      if (code === "service_auth_failed") return "受理密钥不正确。";
+      return (body.errors || ["创建失败"]).join(" ");
+    }
 
     function reviewerName() {
       const name = reviewerInput.value.trim();
@@ -89,21 +144,68 @@
 
     function authHeaders(extra) {
       const headers = Object.assign({}, extra || {});
-      const key = keyInput.value.trim();
-      if (key) headers["X-API-Key"] = key;
+      if (reviewToken) headers["Authorization"] = "Bearer " + reviewToken;
       return headers;
     }
 
     function showAuth(body) {
       const code = (body.errors || [])[0];
-      document.getElementById("auth-error").textContent = code === "review_auth_not_configured"
-        ? "服务还没有配置 REVIEW_API_KEY。"
-        : "审核密钥不正确。";
+      const map = {
+        review_auth_not_configured: "服务还没有配置 REVIEW_API_KEY。",
+        review_auth_failed: "审核引导密钥不正确。",
+        review_token_missing: authMode === "oidc" ? "请先粘贴 IdP 人员令牌。" : "请先登录领取人员令牌。",
+        review_token_expired: "人员令牌已过期，请重新登录。",
+        review_jwt_not_configured: "服务还没有配置审核 JWT。",
+        review_mint_disabled: "OIDC 已开启，mint 已关闭，请使用 IdP 令牌。",
+        review_oidc_jwks: "无法拉取 IdP JWKS，请检查 REVIEW_OIDC_*。",
+      };
+      document.getElementById("auth-error").textContent = map[code] || "人员令牌无效，请重新登录。";
+      document.getElementById("token-meta").textContent = "";
     }
 
     function clearAuth() {
       document.getElementById("auth-error").textContent = "";
     }
+
+    document.getElementById("login").onclick = async () => {
+      clearAuth();
+      const sub = reviewerName();
+      const key = keyInput.value.trim();
+      if (!sub || !key) {
+        document.getElementById("auth-error").textContent = "请填写审核引导密钥和审核人。";
+        return;
+      }
+      const response = await fetch("/auth/review/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        body: JSON.stringify({ sub }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showAuth(body);
+        return;
+      }
+      reviewToken = body.access_token || "";
+      sessionStorage.setItem("review_access_token", reviewToken);
+      document.getElementById("token-meta").textContent = "已登录：" + (body.sub || sub);
+      await load();
+      await loadClosed();
+    };
+
+    document.getElementById("oidc-login").onclick = async () => {
+      clearAuth();
+      let raw = oidcTokenInput.value.trim();
+      if (raw.toLowerCase().startsWith("bearer ")) raw = raw.slice(7).trim();
+      if (!raw) {
+        document.getElementById("auth-error").textContent = "请粘贴 IdP 访问令牌。";
+        return;
+      }
+      reviewToken = raw;
+      sessionStorage.setItem("review_access_token", reviewToken);
+      document.getElementById("token-meta").textContent = "已使用 IdP 令牌";
+      await load();
+      await loadClosed();
+    };
     let selected = null;
     let selectedKind = null;
     let items = [];
@@ -192,15 +294,14 @@
     }
 
     async function sendBack(ticketId) {
-      const reviewer = reviewerName();
-      if (!reviewer) {
-        document.getElementById("action-error").textContent = "请先填写审核人。";
+      if (!reviewToken) {
+        document.getElementById("action-error").textContent = "请先登录领取人员令牌。";
         return;
       }
       const response = await fetch("/tickets/" + encodeURIComponent(ticketId) + "/reopen", {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ reviewer })
+        body: JSON.stringify({})
       });
       const result = await response.json();
       if (response.status === 401) {
@@ -274,16 +375,15 @@
     }
 
     async function decide(approved) {
-      const reviewer = reviewerName();
-      if (!reviewer) {
-        document.getElementById("action-error").textContent = "请先填写审核人。";
+      if (!reviewToken) {
+        document.getElementById("action-error").textContent = "请先登录领取人员令牌。";
         return;
       }
       const edits = document.getElementById("edits").value.trim();
       const response = await fetch("/runs/human", {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ ticket_id: selected, approved, reviewer, edits: edits || null })
+        body: JSON.stringify({ ticket_id: selected, approved, edits: edits || null })
       });
       const result = await response.json();
       if (response.status === 401) {
@@ -304,8 +404,8 @@
     async function waitForRun(traceId) {
       detail.innerHTML = "<h2>处理中</h2><p class=\"meta\">正在分类和起草。</p>";
       for (let attempt = 0; attempt < 240; attempt += 1) {
-        const response = await fetch("/runs/" + encodeURIComponent(traceId));
-        if (!response.ok) return null;
+        const response = await fetch("/runs/" + encodeURIComponent(traceId), { headers: serviceHeaders() });
+        if (!response.ok) return await response.json().catch(() => ({}));
         const body = await response.json();
         if (body.status !== "running") return body;
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -318,9 +418,8 @@
       error.textContent = "";
       const response = await fetch("/runs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: serviceHeaders(),
         body: JSON.stringify({
-          auto_approve: false,
           ticket: {
             ticket_id: "ui-" + Date.now(),
             subject: document.getElementById("subject").value,
@@ -330,7 +429,7 @@
       });
       const created = await response.json().catch(() => ({}));
       if (!response.ok) {
-        error.textContent = (created.errors || ["创建失败"]).join(" ");
+        error.textContent = serviceError(created);
         return;
       }
       let settled = created;
@@ -338,6 +437,11 @@
         settled = await waitForRun(created.trace_id);
         if (!settled) {
           error.textContent = "运行没有在时限内结束";
+          return;
+        }
+        const code = (settled.errors || [])[0];
+        if (code === "service_auth_failed" || code === "service_auth_not_configured") {
+          error.textContent = serviceError(settled);
           return;
         }
       }

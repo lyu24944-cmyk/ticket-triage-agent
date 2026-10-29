@@ -1,19 +1,19 @@
 """同一张工单再提交时，不覆盖待审草稿，也不抹掉已结案历史。"""
 
+from ticket_triage.config import settings
 from ticket_triage.graph.workflow import forget_memory, run_triage
 from ticket_triage.models import RunRequest, TicketIn
 from ticket_triage.tools.tickets import get_ticket, seed_ticket
 
 
-def _request(ticket_id: str, *, auto_approve: bool) -> RunRequest:
+def _request(ticket_id: str) -> RunRequest:
     return RunRequest(
         ticket=TicketIn(ticket_id=ticket_id, subject="紧急退款", body="我被重复扣款，需要退款"),
-        auto_approve=auto_approve,
     )
 
 
 def test_second_submit_keeps_pending_draft_and_history() -> None:
-    first = run_triage(_request("mem-pending", auto_approve=False))
+    first = run_triage(_request("mem-pending"))
     assert first.awaiting_human is True
     history = [item["status"] for item in get_ticket("mem-pending")["history"]]
     assert history == ["open"]
@@ -22,7 +22,6 @@ def test_second_submit_keeps_pending_draft_and_history() -> None:
     second = run_triage(
         RunRequest(
             ticket=TicketIn(ticket_id="mem-pending", subject="换成别的主题", body="别的正文"),
-            auto_approve=True,
         )
     )
     assert second.awaiting_human is True
@@ -33,12 +32,13 @@ def test_second_submit_keeps_pending_draft_and_history() -> None:
     assert get_ticket("mem-pending")["subject"] == "紧急退款"
 
 
-def test_submit_after_resolve_keeps_resolved_history() -> None:
-    first = run_triage(_request("mem-closed", auto_approve=True))
+def test_submit_after_resolve_keeps_resolved_history(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "require_hitl", False)
+    first = run_triage(_request("mem-closed"))
     assert first.status == "resolved"
     before = get_ticket("mem-closed")["history"]
 
-    second = run_triage(_request("mem-closed", auto_approve=True))
+    second = run_triage(_request("mem-closed"))
     assert second.status == "resolved"
     assert second.errors == ["already_closed"]
     assert second.trace_id is None

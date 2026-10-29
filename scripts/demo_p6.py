@@ -13,7 +13,6 @@ def _run(ticket_id: str, subject: str, body: str):
     return run_triage(
         RunRequest(
             ticket=TicketIn(ticket_id=ticket_id, subject=subject, body=body),
-            auto_approve=True,
         )
     )
 
