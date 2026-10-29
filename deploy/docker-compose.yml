@@ -1,0 +1,36 @@
+# 单实例：网关对外 TLS，API 只在内网。不要 docker compose scale api。
+# 用法见 docs/GATEWAY.md
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # 不 publish ports：外网碰不到 8000
+    expose:
+      - "8000"
+    environment:
+      API_BIND_HOST: "0.0.0.0"
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-compose-service-key}
+      REVIEW_API_KEY: ${REVIEW_API_KEY:-compose-review-key}
+      LLM_PROVIDER: stub
+      REQUIRE_HITL: "true"
+      RUN_WORKERS: "2"
+      RUN_QUEUE_LIMIT: "32"
+    volumes:
+      - triage-data:/app/.data
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+
+volumes:
+  triage-data:

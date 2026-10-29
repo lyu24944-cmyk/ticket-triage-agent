@@ -1,0 +1,49 @@
+# P0.3：依赖漏洞扫描 + 镜像漏洞扫描 + 非 root 门禁
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  deps-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 升级 pip 并安装项目
+        run: |
+          python -m pip install -U "pip>=26.2"
+          pip install -e ".[dev]"
+          pip install "pip-audit>=2.7"
+      - name: 依赖漏洞扫描
+        # 排除本仓库 editable 安装行；只审计第三方依赖（--strict 对 skip-editable 会误报）
+        run: |
+          pip freeze | grep -vE '^(ticket-triage-agent|-e )' > "$RUNNER_TEMP/audit-reqs.txt"
+          pip-audit -r "$RUNNER_TEMP/audit-reqs.txt" --strict --progress-spinner off
+
+  image-scan-and-nonroot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dockerfile 非 root 静态门禁
+        run: python tests/check_dockerfile_nonroot.py
+      - name: 构建镜像
+        run: docker build -t ticket-triage-agent:ci .
+      - name: 运行时非 root（uid 10001）
+        run: |
+          set -euo pipefail
+          uid="$(docker run --rm --entrypoint id ticket-triage-agent:ci -u)"
+          echo "container uid=$uid"
+          test "$uid" = "10001"
+      - name: Trivy 镜像扫描（CRITICAL/HIGH 失败）
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ticket-triage-agent:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
