@@ -132,6 +132,7 @@ uvicorn citation_rag.api.main:app --host 127.0.0.1 --port 8001
 2. **值班信号**：已做一页纸说明 `docs/ONCALL.md`。日志固定键含 `alert_code` / `model_failed`（`ticket_triage.ops`）；`OPS_LOG_JSON` 进集中日志；`ALERT_WEBHOOK_URL` / SMTP 外发。`GET /health` 已有 `checks.queue`。不上完整 APM。CI 仍是 stub pytest + 黄金评测，不把这些日志当合并门槛。
 3. **客户数据**：已做。保留期限与可进提示词字段见 `docs/DATA.md`；送模型前脱敏在 `privacy.py`；审核人只在审核接口，不与 `SERVICE_API_KEY` 混用。
 4. **提示词可回滚**：已做。`PROMPT_PIN=current|previous`（v3/v2），见 `docs/PROMPTS.md`。本地可用 `evals/compare_prompt_versions.py` 对比；内测影子评测 `evals/run_shadow.py`（抽样真实单只打分不写状态，退回率信号可回滚）。CI 只跑 stub + 当前销钉，不打两次外网模型。
+4b. **结案回调签名+重试**：已做。出站 `ticket.closed` 带 `X-Ticket-Triage-Signature` / `Delivery-Id`；失败入 runtime `closure_callbacks` 指数退避；耗尽告警 `closure_callback_failed`，不回滚结案。见 `docs/P3_INTEGRATION.md`。
 5. **审核 OIDC**：设 `REVIEW_OIDC_ISSUER` 后 mint 关闭，人审只接受 IdP Bearer（JWKS/RS256）；`sub` 口径不变。见 `docs/P1_IDENTITY.md`。
 
 **上面各项（加同秒排队、工人不挂死、备份/杀进程演练、OIDC、影子评测）都做完了。** 部署继续 `uvicorn` 一个进程、一份数据目录。只有**确实需要同时跑两个写进程**时，才另开一题：工单库和运行库换到 Postgres，用租约代替 `instance.lock`，进行中的任务能被另一个进程领走。在那之前不要改成多副本。

@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     idempotency_ttl_seconds: int = 86400
     # 出站结案回调超时。
     closure_callback_timeout_seconds: float = 5.0
+    # 出站回调最多尝试次数（含首次）；失败按指数退避，不回滚结案状态。
+    closure_callback_max_attempts: int = 4
+    # 首次失败后的退避基数（秒）：delay = base * 2^(attempt-1)
+    closure_callback_backoff_seconds: float = 2.0
 
     @field_validator("prompt_pin", mode="before")
     @classmethod

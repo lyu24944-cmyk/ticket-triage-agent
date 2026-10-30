@@ -25,6 +25,7 @@ ALERT_CODES = frozenset(
         "act_model_failed",
         "draft_model_failed",
         "enrich_failed",
+        "closure_callback_failed",
     }
 )
 

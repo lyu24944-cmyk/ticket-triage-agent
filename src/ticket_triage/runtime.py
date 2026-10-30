@@ -213,6 +213,28 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_run_jobs_active ON run_jobs(status, created_at)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS closure_callbacks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            delivery_id TEXT NOT NULL UNIQUE,
+            url TEXT NOT NULL,
+            body TEXT NOT NULL,
+            headers_json TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 4,
+            next_attempt_at TEXT NOT NULL,
+            status TEXT NOT NULL,
+            last_error TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_closure_callbacks_due "
+        "ON closure_callbacks(status, next_attempt_at)"
+    )
 
 
 def _dump_value(value: Any) -> Any:

@@ -510,6 +510,12 @@ def _worker_loop() -> None:
                 _WAKE.wait(0.2)
                 continue
             if job is None:
+                try:
+                    from ticket_triage.integrations.callback import process_due_callbacks
+
+                    process_due_callbacks(limit=5)
+                except Exception:
+                    logger.exception("closure callback drain failed")
                 _WAKE.wait(0.2)
                 _WAKE.clear()
                 continue

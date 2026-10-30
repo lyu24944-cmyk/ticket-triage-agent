@@ -51,13 +51,14 @@ def main() -> int:
 
     callbacks: list[dict] = []
 
-    def capture(url: str, payload: dict) -> None:
+    def capture(url: str, body: bytes, headers: dict[str, str]) -> None:
+        payload = json.loads(body.decode("utf-8"))
         callbacks.append(payload)
-        print(f"[callback] {payload}")
+        print(f"[callback] {payload} headers={sorted(headers)}")
 
     import ticket_triage.integrations.callback as cb
 
-    cb._post = capture  # type: ignore[method-assign]
+    cb._http_post = capture  # type: ignore[method-assign]
 
     client = TestClient(app)
     payload = {

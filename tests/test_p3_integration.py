@@ -236,15 +236,23 @@ def test_tenant_queue_quota(monkeypatch) -> None:
 def test_closure_callback_on_approve(monkeypatch, service_headers, review_headers) -> None:
     calls: list[dict[str, Any]] = []
 
-    def fake_post(url: str, payload: dict) -> None:
-        calls.append({"url": url, "payload": payload})
+    def fake_http(url: str, body: bytes, headers: dict[str, str]) -> None:
+        calls.append(
+            {
+                "url": url,
+                "body": body,
+                "payload": json.loads(body.decode("utf-8")),
+                "headers": dict(headers),
+            }
+        )
 
     monkeypatch.setattr(settings, "closure_callback_url", "http://callback.test/hook")
+    monkeypatch.setattr(settings, "webhook_signing_secret", "wh-secret")
     monkeypatch.setattr(settings, "require_hitl", True)
     clear_tenant_cache()
     import ticket_triage.integrations.callback as cb
 
-    monkeypatch.setattr(cb, "_post", fake_post)
+    monkeypatch.setattr(cb, "_http_post", fake_http)
 
     client = TestClient(app)
     created = client.post(
@@ -273,6 +281,12 @@ def test_closure_callback_on_approve(monkeypatch, service_headers, review_header
     assert calls
     assert calls[0]["payload"]["status"] == "resolved"
     assert calls[0]["payload"]["ticket_id"] == "cb-1"
+    assert cb.DELIVERY_HEADER in calls[0]["headers"]
+    assert cb.verify_signature(
+        "wh-secret",
+        calls[0]["body"],
+        calls[0]["headers"][cb.SIGNATURE_HEADER],
+    )
 
 
 def test_email_webhook_happy_path(monkeypatch) -> None:

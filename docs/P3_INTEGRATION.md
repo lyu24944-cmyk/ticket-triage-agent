@@ -9,7 +9,7 @@
   → POST /v1/webhooks/zendesk|email（HMAC 签名 + Delivery-Id 幂等）
   → 待审 GET /v1/runs/pending
   → POST /v1/runs/human 通过
-  → 出站 POST callback_url（ticket.closed）
+  → 出站 POST callback_url（ticket.closed，HMAC 签名 + Delivery-Id；失败有限重试，不回滚结案）
 重复同一 Delivery-Id → 回放同一 trace，不双单
 ```
 
@@ -46,6 +46,8 @@ HMAC-SHA256(secret, raw_body)。密钥：单租户 `WEBHOOK_SIGNING_SECRET`，�
 - `X-API-Key` → 租户；换票 JWT 写入 `tid`。
 - 每租户 `queue_limit`（缺省 `RUN_QUEUE_LIMIT`）。
 - 结案回调：`CLOSURE_CALLBACK_URL` 或租户 `callback_url`。
+  - 头：`X-Ticket-Triage-Signature: sha256=<HMAC-SHA256(secret, body)>`（密钥同进线 `WEBHOOK_SIGNING_SECRET` / 租户 `webhook_secret`）；`X-Ticket-Triage-Delivery-Id`。
+  - 失败写入 runtime `closure_callbacks`，指数退避重试（`CLOSURE_CALLBACK_MAX_ATTEMPTS` 默认 4）；耗尽标 `dead` 并告警 `closure_callback_failed`，**不回滚**已写工单状态。
 
 示例：
 

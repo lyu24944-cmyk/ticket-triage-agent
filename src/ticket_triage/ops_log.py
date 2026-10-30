@@ -70,6 +70,8 @@ def resolve_alert_code(
     """映射到可告警码；无则空串。"""
     if event == "queue_full":
         return "queue_full"
+    if event == "closure_callback_dead" or tool_error == "closure_callback_failed":
+        return "closure_callback_failed"
     if model_failed.startswith(STUB_FALLBACK_PREFIXES):
         return model_failed
     if tool_error.startswith(TOOL_ERROR_PREFIXES):
