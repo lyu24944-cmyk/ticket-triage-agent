@@ -94,6 +94,67 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_tickets_status_updated "
         "ON tickets(tenant_id, status, updated_at DESC, ticket_id DESC)"
     )
+    # Everything 风格：本地倒排/trigram 索引，检索走索引而非全表 LIKE。
+    # 静态加密开启时不建可用明文索引（密文无法子串检索）。
+    conn.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS tickets_fts USING fts5(
+            tenant_id UNINDEXED,
+            ticket_id UNINDEXED,
+            subject,
+            body,
+            tokenize='trigram'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
+            article_id UNINDEXED,
+            title,
+            body,
+            keywords,
+            tokenize='trigram'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS kb_fts_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _fts_quote(term: str) -> str:
+    """FTS5 短语查询：双引号包裹并转义内部引号。"""
+    return '"' + term.replace('"', '""') + '"'
+
+
+def _sync_ticket_fts(
+    conn: sqlite3.Connection,
+    tenant_id: str,
+    ticket_id: str,
+    subject: str,
+    body: str,
+) -> None:
+    from ticket_triage.data_crypto import encryption_enabled
+
+    if encryption_enabled():
+        return
+    conn.execute(
+        "DELETE FROM tickets_fts WHERE tenant_id = ? AND ticket_id = ?",
+        (tenant_id, ticket_id),
+    )
+    conn.execute(
+        """
+        INSERT INTO tickets_fts (tenant_id, ticket_id, subject, body)
+        VALUES (?, ?, ?, ?)
+        """,
+        (tenant_id, ticket_id, subject or "", body or ""),
+    )
 
 
 def _connect() -> sqlite3.Connection:
@@ -162,27 +223,67 @@ def list_tickets(
         marks = ",".join("?" for _ in statuses)
         where.append(f"status IN ({marks})")
         params.extend(statuses)
-    if q:
-        like = f"%{q}%"
-        where.append("(ticket_id LIKE ? OR subject LIKE ? OR body LIKE ?)")
-        params.extend([like, like, like])
+    fts_q = (q or "").strip()
+    use_fts = bool(fts_q)
+    if fts_q:
+        from ticket_triage.data_crypto import encryption_enabled
+
+        if encryption_enabled():
+            # 密文无法建可用 FTS；退回 LIKE（与加密前行为一致，命中率仍有限）
+            use_fts = False
+            like = f"%{fts_q}%"
+            where.append("(ticket_id LIKE ? OR subject LIKE ? OR body LIKE ?)")
+            params.extend([like, like, like])
     if cursor:
         # cursor = updated_at|ticket_id（DESC）
         parts = cursor.split("|", 1)
         if len(parts) == 2:
             where.append("(updated_at < ? OR (updated_at = ? AND ticket_id < ?))")
             params.extend([parts[0], parts[0], parts[1]])
-    sql = (
-        f"SELECT {_select_cols()} FROM tickets WHERE {' AND '.join(where)} "
-        "ORDER BY updated_at DESC, ticket_id DESC"
-    )
-    if limit is not None:
-        sql += " LIMIT ?"
-        params.append(max(1, min(int(limit), 200)))
     with _LOCK:
         conn = _connect()
         try:
-            rows = conn.execute(sql, tuple(params)).fetchall()
+            if use_fts:
+                # 短查询走 trigram；过长则截断，避免整段正文 AND 过严
+                term = fts_q if len(fts_q) <= 64 else fts_q[:64]
+                fts_params: list[Any] = [tenant_id, _fts_quote(term)]
+                fts_where = ["t.tenant_id = ?", "tickets_fts MATCH ?"]
+                if statuses:
+                    marks = ",".join("?" for _ in statuses)
+                    fts_where.append(f"t.status IN ({marks})")
+                    fts_params.extend(statuses)
+                if cursor:
+                    parts = cursor.split("|", 1)
+                    if len(parts) == 2:
+                        fts_where.append(
+                            "(t.updated_at < ? OR (t.updated_at = ? AND t.ticket_id < ?))"
+                        )
+                        fts_params.extend([parts[0], parts[0], parts[1]])
+                cols = (
+                    "t.tenant_id, t.ticket_id, t.status, t.subject, t.body, "
+                    "t.history_json, t.updated_at"
+                )
+                sql = (
+                    f"SELECT {cols} FROM tickets AS t "
+                    "JOIN tickets_fts ON t.tenant_id = tickets_fts.tenant_id "
+                    "AND t.ticket_id = tickets_fts.ticket_id "
+                    f"WHERE {' AND '.join(fts_where)} "
+                    "ORDER BY t.updated_at DESC, t.ticket_id DESC"
+                )
+                if limit is not None:
+                    sql += " LIMIT ?"
+                    fts_params.append(max(1, min(int(limit), 200)))
+                rows = conn.execute(sql, tuple(fts_params)).fetchall()
+            else:
+                sql = (
+                    f"SELECT {_select_cols()} FROM tickets WHERE {' AND '.join(where)} "
+                    "ORDER BY updated_at DESC, ticket_id DESC"
+                )
+                local_params = list(params)
+                if limit is not None:
+                    sql += " LIMIT ?"
+                    local_params.append(max(1, min(int(limit), 200)))
+                rows = conn.execute(sql, tuple(local_params)).fetchall()
         finally:
             conn.close()
     return [_row_to_ticket(row) for row in rows]
@@ -326,6 +427,8 @@ def seed_ticket(
                     _now(),
                 ),
             )
+            # 索引明文；已存在工单也刷新 FTS，避免 IGNORE 后索引缺失
+            _sync_ticket_fts(conn, tenant_id, ticket_id, subject, body)
             conn.commit()
         finally:
             conn.close()
@@ -342,6 +445,10 @@ def delete_ticket(
         try:
             conn.execute(
                 "DELETE FROM tickets WHERE tenant_id = ? AND ticket_id = ?",
+                (tenant_id, ticket_id),
+            )
+            conn.execute(
+                "DELETE FROM tickets_fts WHERE tenant_id = ? AND ticket_id = ?",
                 (tenant_id, ticket_id),
             )
             conn.commit()

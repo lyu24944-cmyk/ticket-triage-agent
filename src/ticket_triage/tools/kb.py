@@ -1,6 +1,9 @@
-"""模拟知识库 — P2 将通过 MCP 暴露同一接口。"""
+"""知识库检索 — 本地 FTS5 索引 + 关键词回退（无 RAG/MCP 时）。"""
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 KB_ARTICLES: list[dict[str, str]] = [
     {
@@ -28,16 +31,111 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
     "kb-account-delete": ("delete account", "account deletion", "注销", "关闭账号"),
 }
 
+_ARTICLES_BY_ID = {article["id"]: article for article in KB_ARTICLES}
+
+
+def _corpus_fingerprint() -> str:
+    payload = {
+        "articles": KB_ARTICLES,
+        "keywords": {key: list(value) for key, value in _KEYWORDS.items()},
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _ensure_kb_index() -> None:
+    """把 KB 文章 upsert 进共享 SQLite 的 kb_fts；语料变更时重建。"""
+    from ticket_triage.tools.tickets import _LOCK, _connect
+
+    fingerprint = _corpus_fingerprint()
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT value FROM kb_fts_meta WHERE key = 'fingerprint'"
+            ).fetchone()
+            if row and row[0] == fingerprint:
+                return
+            conn.execute("DELETE FROM kb_fts")
+            for article in KB_ARTICLES:
+                keywords = " ".join(_KEYWORDS.get(article["id"], ()))
+                conn.execute(
+                    """
+                    INSERT INTO kb_fts (article_id, title, body, keywords)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (article["id"], article["title"], article["body"], keywords),
+                )
+            conn.execute(
+                """
+                INSERT INTO kb_fts_meta (key, value) VALUES ('fingerprint', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (fingerprint,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def _keyword_scores(query_lower: str) -> dict[str, int]:
+    scores: dict[str, int] = {}
+    for article_id, keywords in _KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw.lower() in query_lower)
+        if score:
+            scores[article_id] = score
+    return scores
+
+
+def _fts_scores(query: str, *, limit: int) -> dict[str, int]:
+    """短查询走 trigram 子串；长查询不整句 MATCH（避免 AND 过严）。"""
+    from ticket_triage.tools.tickets import _LOCK, _connect, _fts_quote
+
+    term = query.strip()
+    if len(term) > 64:
+        return {}
+    with _LOCK:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT article_id
+                FROM kb_fts
+                WHERE kb_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (_fts_quote(term), max(limit * 3, 9)),
+            ).fetchall()
+        except Exception:
+            return {}
+        finally:
+            conn.close()
+    # 按 FTS 返回顺序给分（越靠前越高）
+    out: dict[str, int] = {}
+    for index, (article_id,) in enumerate(rows):
+        out[str(article_id)] = max(1, len(rows) - index)
+    return out
+
 
 def search_knowledge_base(query: str, limit: int = 3) -> list[dict[str, str]]:
-    """按关键词匹配返回模拟 KB 命中；空查询或无关文本返回空列表，不伪造引用。"""
-    q = (query or "").lower().strip()
+    """FTS5 索引命中 + 关键词回退；空查询或无关文本返回空列表，不伪造引用。"""
+    q = (query or "").strip()
     if not q:
         return []
-    scored: list[tuple[int, dict[str, str]]] = []
-    for article in KB_ARTICLES:
-        score = sum(1 for kw in _KEYWORDS.get(article["id"], ()) if kw.lower() in q)
-        if score:
-            scored.append((score, article))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [a for _, a in scored[:limit]]
+    _ensure_kb_index()
+    scores = _keyword_scores(q.lower())
+    # 关键词权重更高，保证黄金集/长工单正文仍靠关键词命中
+    for article_id, score in list(scores.items()):
+        scores[article_id] = score * 10
+    for article_id, score in _fts_scores(q, limit=limit).items():
+        scores[article_id] = scores.get(article_id, 0) + score
+    if not scores:
+        return []
+    ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+    hits: list[dict[str, str]] = []
+    for article_id, _ in ranked[:limit]:
+        article = _ARTICLES_BY_ID.get(article_id)
+        if article:
+            hits.append(article)
+    return hits

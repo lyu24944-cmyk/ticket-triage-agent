@@ -50,10 +50,11 @@ act 只可选 search_knowledge_base、get_ticket_history，或 finish。
 update_ticket_status 只能由 finalize 在人审之后调用。
 
 act / finalize 工具面：
-  未设置 RAG_BASE_URL，或设为 local、USE_MCP=false → 进程内关键词工具
+  未设置 RAG_BASE_URL，或设为 local、USE_MCP=false → 进程内 FTS5（trigram）+ 关键词回退
   RAG_BASE_URL=http://127.0.0.1:8001 → 知识库检索改调 citation-rag-agent
   USE_MCP=true → MCP stdio 客户端 → python -m mcp_server
 ```
+
 
 | 节点 | 职责 |
 |------|------|
