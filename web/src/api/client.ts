@@ -77,26 +77,29 @@ export function mintToken(
   });
 }
 
-export function fetchPending(
-  token: string,
-  opts: { cursor?: string | null; limit?: number } = {},
-): Promise<Page<PendingItem>> {
+function pageQuery(opts: { cursor?: string | null; limit?: number; q?: string }): string {
   const params = new URLSearchParams();
   params.set("limit", String(opts.limit ?? 20));
   if (opts.cursor) params.set("cursor", opts.cursor);
-  return request<Page<PendingItem>>(`/v1/runs/pending?${params}`, {
+  const q = opts.q?.trim();
+  if (q) params.set("q", q);
+  return params.toString();
+}
+
+export function fetchPending(
+  token: string,
+  opts: { cursor?: string | null; limit?: number; q?: string } = {},
+): Promise<Page<PendingItem>> {
+  return request<Page<PendingItem>>(`/v1/runs/pending?${pageQuery(opts)}`, {
     headers: authHeaders(token),
   });
 }
 
 export function fetchClosed(
   token: string,
-  opts: { cursor?: string | null; limit?: number } = {},
+  opts: { cursor?: string | null; limit?: number; q?: string } = {},
 ): Promise<Page<ClosedItem>> {
-  const params = new URLSearchParams();
-  params.set("limit", String(opts.limit ?? 20));
-  if (opts.cursor) params.set("cursor", opts.cursor);
-  return request<Page<ClosedItem>>(`/v1/tickets?${params}`, {
+  return request<Page<ClosedItem>>(`/v1/tickets?${pageQuery(opts)}`, {
     headers: authHeaders(token),
   });
 }
