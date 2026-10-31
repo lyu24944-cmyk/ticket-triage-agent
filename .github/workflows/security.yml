@@ -40,7 +40,7 @@ jobs:
           echo "container uid=$uid"
           test "$uid" = "10001"
       - name: Trivy 镜像扫描（CRITICAL/HIGH 失败）
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ticket-triage-agent:ci
           format: table

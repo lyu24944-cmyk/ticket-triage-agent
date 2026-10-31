@@ -30,7 +30,8 @@ docker run --rm --entrypoint id ticket-triage-agent:ci -u   # 期望 10001
 - `useradd --uid 10001 … appuser`
 - 最终指令是 `USER appuser`，其后不得再 `USER root`
 - `deploy/docker-compose.yml` 不得写 `user: root` / `user: 0`
-- 构建时升级 pip，减少把工具链漏洞打进镜像
+- 构建时升级 pip 完成安装，然后卸掉 pip。当前最新 pip 的 `pip/_vendor/bom.cdx.json` 仍记录 msgpack 1.1.2、setuptools 70.3.0、urllib3 2.7.0，Trivy 会把这份 SBOM 当成已安装包。运行时不需要 pip
+- 应用依赖把 `urllib3` 下限钉在 2.8.0；构建 `setuptools` 下限是 78.1.1。镜像里若再装上更旧的 msgpack / setuptools，构建脚本会失败
 
 ## 不要做的事
 

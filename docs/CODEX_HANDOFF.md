@@ -47,7 +47,7 @@
 | 真实模型分类、调度、起草 | 完成 | `llm/model.py`；失败记 `classify_model_failed` / `act_model_failed` / `draft_model_failed` |
 | 审核台 | 完成 | Vite+React `web/` → `api/static/review`；`GET /review`；只打 `/v1` |
 | 待审、已处理、重新送审 | 完成 | `GET /runs/pending`，`GET /tickets`，`POST /tickets/{id}/reopen` |
-| 受理密钥与审核密钥 | 完成 | `SERVICE_API_KEY`、`REVIEW_API_KEY`；`*_FILE` / `*_PREVIOUS` 见 `docs/SECRETS.md` |
+| 受理密钥与审核密钥 | 完成 | 受理 `X-API-Key`；人审 `Authorization: Bearer` JWT。`REVIEW_API_KEY` 只用于换票。见 `docs/P1_IDENTITY.md`、`docs/SECRETS.md` |
 | 网关 TLS / 限流 / body | 完成 | `deploy/nginx` + `docs/GATEWAY.md`；API 不对外 publish |
 | 依赖/镜像扫描与非 root | 完成 | `.github/workflows/security.yml`；`docs/SECURITY_CI.md`；uid 10001 |
 | 冷备份 / RPO·RTO | 完成 | `scripts/backup_sqlite.py`；`docs/BACKUP.md`（RPO≤24h，RTO≤1h） |
@@ -61,17 +61,18 @@
 
 ### 鉴权范围
 
-两把密钥都放在请求头 `X-API-Key`，值不能混用。
+受理和人审不是同一把密钥，也不能放在同一种请求头里。
 
-- 受理：`POST /runs`、`GET /runs/{trace_id}` 的值是 `SERVICE_API_KEY`。没配置时返回 `service_auth_not_configured`。
-- 审核：`GET /runs/pending`、`GET /traces/{trace_id}`、`POST /runs/human`、`GET /tickets`、`POST /tickets/{id}/reopen` 的值是 `REVIEW_API_KEY`。没配置时返回 `review_auth_not_configured`。
+- 受理：`POST /runs`、`GET /runs/{trace_id}` 用 `X-API-Key: SERVICE_API_KEY`。没配置时返回 `service_auth_not_configured`。
+- 换票：`POST /auth/review/token` 用 `X-API-Key: REVIEW_API_KEY`。没配置时返回 `review_auth_not_configured`。这把密钥不能直接调人审接口。设了 `REVIEW_OIDC_ISSUER` 后换票关闭。
+- 人审：`GET /runs/pending`、`GET /traces/{trace_id}`、`POST /runs/human`、`GET /tickets`、`POST /tickets/{id}/reopen`，以及导出/删除和审计查询，用 `Authorization: Bearer <JWT>`。没有 Bearer 时返回 `review_token_missing`。JWT 的 `sub` 是审核人。
 
 `trace_id` 不是读草稿的凭证。是否跳过人审只看 `REQUIRE_HITL`。请求体里的 `auto_approve` 会被忽略。
 
 ### 审核台行为
 
 - 地址：`http://127.0.0.1:8000/review`
-- 页面先填 `REVIEW_API_KEY` 和审核人。新建工单还要填 `SERVICE_API_KEY`
+- 默认先填 `REVIEW_API_KEY` 和审核人 `sub`，换一张 Bearer 再调人审接口。OIDC 模式下改为粘贴 IdP 令牌。新建工单仍填 `SERVICE_API_KEY`
 - 左侧：待审 / 已处理 / 新建
 - 待审：草稿、引用原文、本次工具调用、通过 / 驳回 / 修改后通过、节点耗时
 - 已处理：状态历史；「重新送审」写回 `pending`，历史追加 `pending`，不覆盖 `escalated`/`resolved`
@@ -185,7 +186,7 @@ ticket-triage-agent/
 - 两个仓库保持分离；工单通过 RAG_BASE_URL 调 citation-rag
 - 引用只能来自本次检索；分类标签必须在白名单内；模型 fallback 必须让评测失败
 - 图上的工具节点是 act。enrich_failed 只是工具异常的错误码
-- 受理接口要 SERVICE_API_KEY，审核接口要 REVIEW_API_KEY，两把不能混用
+- 受理接口要 SERVICE_API_KEY（X-API-Key）。人审接口要人员 JWT（Authorization: Bearer）。REVIEW_API_KEY 只用于换票，不能直接调人审
 - 同一数据目录只运行一个 API 进程
 
 先确认用户要做交接说明第 7 节的哪一项，再改代码。
