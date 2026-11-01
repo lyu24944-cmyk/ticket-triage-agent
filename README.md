@@ -3,6 +3,7 @@
 面向 AI Agent 工程师作品集的 LangGraph **工单分流**工作流：分类 → 白名单内自选工具 → 起草回复 → **人工审核（HITL）** → 结案/升级。
 
 - 锁定决策：见 [docs/DECISIONS.md](docs/DECISIONS.md)
+- 代理技能：见 [AGENTS.md](AGENTS.md)（`.cursor/skills/`）
 - P2 MCP 用法：见 [docs/MCP.md](docs/MCP.md)
 - P2/评测 P3 验收：见 [docs/P2_MCP_P3_EVALS.md](docs/P2_MCP_P3_EVALS.md)
 - 集成与产品化 P3：见 [docs/P3_INTEGRATION.md](docs/P3_INTEGRATION.md)
@@ -203,6 +204,7 @@ mcp_server/            # MCP Server（stdio）
 tests/                 # 单测 + MCP integration
 evals/                 # P3 黄金集与打分
 docs/                  # 中文文档
+.cursor/skills/        # 代理技能（索引见 AGENTS.md）
 ```
 
 ## 路线图
