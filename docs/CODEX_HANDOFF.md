@@ -1,6 +1,6 @@
 # Codex 交接说明（工单分流 Agent）
 
-把这份文档连同仓库当前代码一起交给下一个代理。目标是在**不破坏现有门禁与演示路径**的前提下继续完善。
+把这份文档连同仓库当前代码一起交给下一个代理。目标是在**不破坏现有门禁与演示路径**的前提下继续完善。Cursor 短技能在 `.cursor/skills/`，索引见仓库根目录 `AGENTS.md`。
 
 ## 1. 仓库与分支
 
@@ -181,6 +181,7 @@ ticket-triage-agent/
 请阅读 docs/CODEX_HANDOFF.md 和 docs/P5_RUNBOOK.md，在已提交代码上继续。
 
 硬约束：
+- 先读仓库根目录 AGENTS.md，按 .cursor/skills 里对应技能执行
 - 默认 pytest/CI 保持 stub，不依赖 API Key
 - 不提交 .env；不打印密钥
 - 两个仓库保持分离；工单通过 RAG_BASE_URL 调 citation-rag
@@ -189,7 +190,7 @@ ticket-triage-agent/
 - 受理接口要 SERVICE_API_KEY（X-API-Key）。人审接口要人员 JWT（Authorization: Bearer）。REVIEW_API_KEY 只用于换票，不能直接调人审
 - 同一数据目录只运行一个 API 进程
 
-先确认用户要做交接说明第 7 节的哪一项，再改代码。
+第 7 节各项已完成，不要重做。下一件先看 AGENTS.md 的 next-work，确认范围再改代码。
 ```
 
 ## 10. 已知边角
