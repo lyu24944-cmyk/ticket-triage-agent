@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ApiError, authMessage, decideHuman, fetchTrace, reopenTicket } from "../api/client";
+import { ModelGovernance } from "./ModelGovernance";
 import type { AuthMode, ClosedItem, PendingItem, TraceSpan } from "../api/types";
 import {
   NODE_LABEL,
@@ -532,6 +533,7 @@ export function DetailPanel({
         </div>
       </dl>
       <p className="hint">快捷键：J / K 或方向键移动，/ 聚焦搜索。</p>
+      <ModelGovernance variant="stage" />
     </div>
     </Workspace>
   );

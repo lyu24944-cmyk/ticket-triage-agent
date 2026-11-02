@@ -44,3 +44,17 @@ python evals/run_shadow.py --sample 20 --compare
 ```
 
 写出 `evals/shadow_report.json`：`fallback_rate`（退回 stub 比例）、`recommend_pin`。退回变多或工具选择掉下去时设 `PROMPT_PIN=previous` 即回滚。
+
+## 审核台只读入口
+
+`GET /v1/governance/model` 不需要密钥，只返回当前销钉（`current` / `previous`）、解析后的修订（v3 / v2）、生效版本号，以及三条退回码的口径：
+
+| 码 | 含义 |
+|----|------|
+| `classify_model_failed` | 分类模型失败，已退回关键词分类 |
+| `act_model_failed` | 调度模型失败，已改走固定规则 |
+| `draft_model_failed` | 草稿模型失败，已退回 stub 草稿 |
+
+审核台登录页、未选工单的阅读区，以及队列底部的「模型治理」都读这一份。页面上不能改销钉。未知销钉或未列入名单的提供者不会回显原文。响应里没有 API Key、Base URL 或工单正文。
+
+回滚仍是：把 `PROMPT_PIN` 设为 `previous`，只重启这一个 API 进程。CI 不调用这个入口做门禁，也不在流水线里对比两版外网模型。
