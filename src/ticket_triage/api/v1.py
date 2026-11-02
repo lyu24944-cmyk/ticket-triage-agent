@@ -136,6 +136,14 @@ def _run_status_envelope(status_code: int, payload: dict, *, trace_id: str | Non
     return JSONResponse(status_code=status_code, content=payload)
 
 
+@router.get("/governance/model")
+def model_governance() -> dict:
+    """销钉与失败信号口径。只读，不含密钥，不改运行状态。"""
+    from ticket_triage.governance import model_governance_status
+
+    return model_governance_status()
+
+
 @router.get("/auth/review/mode")
 def review_mode() -> dict:
     from ticket_triage.config import settings

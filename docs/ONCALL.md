@@ -53,6 +53,8 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 | `classify_model_failed` | 日志 `node=classify stub_fallback=1` / `model_failed=`；`GET /runs/{trace_id}` 或待审列表的 `errors` | 流程多半还在继续（关键词分类）。查模型 Key、超时、`LLM_PROVIDER` / Base URL。评测门禁会因此失败；值班先保服务，再查退回比例 |
 | `act_model_failed` | 日志 `node=act stub_fallback=1`；同 `trace_id` 的后续 `act` 是否仍在跑 | 调度已改走固定规则。查模型 JSON/超时。工具白名单错误是 `tool_not_allowed`，不是这条 |
 | `draft_model_failed` | 日志 `node=draft stub_fallback=1`；审核台草稿是否还能人审 | 已退回 stub 草稿，通常仍停在 `awaiting_human`。先让审核员处理，再查模型 |
+
+审核台「模型治理」和 `GET /v1/governance/model` 是同一套只读口径：当前 `PROMPT_PIN`、生效版本号、上面三条失败码。不能在页面上改销钉。退回变多时把 `PROMPT_PIN` 设为 `previous`，只重启这一个 API 进程。说明见 `docs/PROMPTS.md`。
 | `enrich_failed` | 日志 `node=act tool_error=enrich_failed`；`GET /traces/{trace_id}` 里 `act` span 的 `detail` | 工具超时或下游挂了（MCP / `RAG_BASE_URL`）。`GET /health` 看 `checks.rag`。软降级后仍可能起草，引用可能为空——先修检索，不要改图节点名 |
 | `closure_callback_failed` | 日志 `event=closure_callback_dead` / `closure_callback_failed`；runtime 表 `closure_callbacks` 里 `status=dead` | 结案已成功，出站回调耗尽重试。查对端 URL、签名密钥是否与进线 Webhook 一致。不要回滚工单状态；修好下游后可手工重放或等运维补投 |
 
