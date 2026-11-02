@@ -15,8 +15,8 @@ description: 选择下一件作品集改进，且不重做已完成的 P1–P7�
 
 ## 还值得做（先确认再动）
 
-1. **作品集包装**（文档，不改运行时）  
-   路线图第 12 周：简历 bullet、架构图、故障案例。README 已有架构图、失败模式表和简历句；`docs/P7_AGENT_PLAN.md` 有指标口径。下一小步是把对外叙述与仓库里的实测口径对齐，故障案例用现有失败模式表来写。不要为了包装改图或改评测门槛。
+1. **作品集包装**（故障案例只读入口已做，不要重做）  
+   路线图第 12 周：简历 bullet、架构图、故障案例。README 已有架构图、失败模式表和简历句。三次评测失败已写成 `docs/FAILURE_CASES.md`，审核台只读块读 `GET /v1/failure-cases`。简历句对的是 2026-10-25 的 `openai-act-v3` 记录。不要为了包装改架构图或评测门槛，不要重跑外网模型来刷新数字。
 
 2. **模型治理产品化**（包一层已有能力，不重写评测）  
    已有：`PROMPT_PIN=current|previous`、`evals/compare_prompt_versions.py`、`evals/run_shadow.py`（只打分、不写状态）、fallback 记 `classify_model_failed` / `act_model_failed` / `draft_model_failed`。产品化是把这套回滚信号收成值班能执行的说明或只读入口。CI 仍只跑 stub + 当前销钉，不把外网模型打进 `.github/workflows/evals.yml`。见 `docs/PROMPTS.md`。

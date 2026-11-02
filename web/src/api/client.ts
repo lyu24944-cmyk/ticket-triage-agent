@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   AuthModeResponse,
+  FailureCasesStatus,
   ClosedItem,
   MintTokenResponse,
   Page,
@@ -61,6 +62,10 @@ function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
 
 export function fetchAuthMode(): Promise<AuthModeResponse> {
   return request<AuthModeResponse>("/v1/auth/review/mode");
+}
+
+export function fetchFailureCases(): Promise<FailureCasesStatus> {
+  return request<FailureCasesStatus>("/v1/failure-cases");
 }
 
 export function mintToken(

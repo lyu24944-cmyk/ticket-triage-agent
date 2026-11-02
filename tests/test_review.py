@@ -198,3 +198,5 @@ def test_pending_exposes_model_fallbacks(monkeypatch, service_headers, review_he
     ) if assets.is_dir() else ""
     assert "分类模型失败" in js_blob
     assert "草稿模型失败" in js_blob
+    assert "故障案例" in js_blob
+    assert "不能在这里改评测" in js_blob
