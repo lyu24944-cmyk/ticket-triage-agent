@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   AuthModeResponse,
   FailureCasesStatus,
+  ModelGovernanceStatus,
   ClosedItem,
   MintTokenResponse,
   Page,
@@ -66,6 +67,10 @@ export function fetchAuthMode(): Promise<AuthModeResponse> {
 
 export function fetchFailureCases(): Promise<FailureCasesStatus> {
   return request<FailureCasesStatus>("/v1/failure-cases");
+}
+
+export function fetchModelGovernance(): Promise<ModelGovernanceStatus> {
+  return request<ModelGovernanceStatus>("/v1/governance/model");
 }
 
 export function mintToken(

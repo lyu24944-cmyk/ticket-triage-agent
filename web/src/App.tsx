@@ -5,6 +5,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { FailureCases } from "./components/FailureCases";
 import { CreateTicket } from "./components/CreateTicket";
 import { DetailPanel } from "./components/DetailPanel";
+import { ModelGovernance } from "./components/ModelGovernance";
 import { TicketList } from "./components/TicketList";
 import {
   avatarText,
@@ -332,6 +333,7 @@ export default function App() {
             <li>修改稿会替换结案内容；驳回时记入升级备注</li>
             <li>已处理的单可以重新送审，原状态留在历史里</li>
           </ul>
+          <ModelGovernance variant="gate" />
           <FailureCases variant="gate" />
         </section>
         <div className="gate-side">
@@ -489,6 +491,7 @@ export default function App() {
           </div>
 
           <div className="rail-foot">
+            <ModelGovernance variant="desk" />
             <FailureCases variant="desk" />
             <button type="button" className="btn ghost block" onClick={() => setComposerOpen((open) => !open)}>
               {composerOpen ? "收起新建" : "新建工单"}

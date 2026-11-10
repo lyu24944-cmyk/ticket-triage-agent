@@ -117,7 +117,7 @@ $env:ANTHROPIC_API_KEY="..."    # openai 则设 OPENAI_API_KEY，可选 OPENAI_B
 python evals/run_evals.py
 ```
 
-不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。提示词用 `PROMPT_PIN=current|previous` 在 v3 / v2 间切换；对比两版见 [docs/PROMPTS.md](docs/PROMPTS.md)。CI 只跑当前销钉，不在流水线里打两次外网模型。
+不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。提示词用 `PROMPT_PIN=current|previous` 在 v3 / v2 间切换；对比两版见 [docs/PROMPTS.md](docs/PROMPTS.md)。CI 只跑当前销钉，不在流水线里打两次外网模型。审核台有一块只读的模型治理说明，数据来自 `GET /v1/governance/model`。
 
 配了 Langfuse 时，每次运行会多送一条 `ticket-triage` trace。版本号（例如 `openai-act-v3` 或 `stub-act-v1`）写在 trace 的 version 和 tag 上，延迟记成 `latency_ms`，有没有退回 stub 记成 `no_model_fallback`。黄金集还会把类别、优先级、引用和工具选择的得分贴到同一条 trace 上。不配 Key 时只保留原来的 SQLite 节点追踪。
 

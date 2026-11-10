@@ -144,6 +144,14 @@ def failure_cases() -> dict:
     return failure_cases_status()
 
 
+@router.get("/governance/model")
+def model_governance() -> dict:
+    """销钉与失败信号口径。只读，不含密钥，不改运行状态。"""
+    from ticket_triage.governance import model_governance_status
+
+    return model_governance_status()
+
+
 @router.get("/auth/review/mode")
 def review_mode() -> dict:
     from ticket_triage.config import settings

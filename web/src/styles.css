@@ -1361,17 +1361,20 @@ textarea:disabled {
   }
 }
 
+.gov,
 .cases {
   font-size: 12px;
   line-height: 1.45;
 }
 
+.gov h2,
 .cases h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
 }
 
+.gov-kicker,
 .cases-kicker {
   margin: 2px 0 0;
   color: var(--signal-deep);
@@ -1379,17 +1382,24 @@ textarea:disabled {
   font-weight: 600;
 }
 
+.gov-pinline {
+  margin: 8px 0 0;
+}
+
+.gov-note,
 .cases-note {
   margin: 6px 0 0;
   color: var(--ink-soft);
 }
 
+.gov-signals,
 .cases-list {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
 }
 
+.gov-signals li,
 .cases-list li {
   display: grid;
   gap: 2px;
@@ -1398,6 +1408,7 @@ textarea:disabled {
   border-top: 1px solid var(--line);
 }
 
+.gov-code,
 .cases-signal {
   color: var(--muted);
   font-size: 11px;
@@ -1407,6 +1418,7 @@ textarea:disabled {
   color: var(--ink-soft);
 }
 
+.gov-gate,
 .cases-gate {
   margin-top: 22px;
   max-width: 440px;
@@ -1416,10 +1428,14 @@ textarea:disabled {
   color: #f5f5f4;
 }
 
+.gov-gate h2,
 .cases-gate h2 {
   color: #f5f5f4;
 }
 
+.gov-gate .gov-kicker,
+.gov-gate .gov-note,
+.gov-gate .gov-code,
 .cases-gate .cases-kicker,
 .cases-gate .cases-note,
 .cases-gate .cases-signal,
@@ -1427,10 +1443,12 @@ textarea:disabled {
   color: #d6d3d1;
 }
 
+.gov-gate .gov-signals li,
 .cases-gate .cases-list li {
   border-top-color: rgba(255, 255, 255, 0.14);
 }
 
+.gov-stage,
 .cases-stage {
   margin-top: 22px;
   padding: 14px 14px 12px;
@@ -1439,6 +1457,7 @@ textarea:disabled {
   background: var(--paper);
 }
 
+.gov-desk,
 .cases-desk {
   margin: 0 0 10px;
   padding: 8px;
@@ -1447,6 +1466,7 @@ textarea:disabled {
   background: var(--paper);
 }
 
+.gov-desk summary,
 .cases-desk summary {
   display: flex;
   align-items: baseline;
@@ -1457,6 +1477,7 @@ textarea:disabled {
   font-weight: 600;
 }
 
+.gov-summary-pin,
 .cases-summary-pin {
   min-width: 0;
   overflow: hidden;

@@ -18,6 +18,28 @@ export type FailureCasesStatus = {
   cases: FailureCase[];
 };
 
+export type ModelGovernanceSignal = {
+  code: string;
+  label: string;
+  node: string;
+  effect: string;
+  log: string;
+};
+
+export type ModelGovernanceStatus = {
+  readonly: boolean;
+  prompt_pin: "current" | "previous" | null;
+  prompt_rev: "v2" | "v3" | null;
+  pin_status: "ok" | "unknown";
+  prompt_version: string | null;
+  llm_provider: string;
+  uses_model: boolean;
+  path_note: string;
+  rollback: string;
+  ci: string;
+  signals: ModelGovernanceSignal[];
+};
+
 export type AuthMode = "mint" | "oidc";
 
 export type AuthModeResponse = {

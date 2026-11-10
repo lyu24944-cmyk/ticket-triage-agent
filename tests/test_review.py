@@ -200,3 +200,5 @@ def test_pending_exposes_model_fallbacks(monkeypatch, service_headers, review_he
     assert "草稿模型失败" in js_blob
     assert "故障案例" in js_blob
     assert "不能在这里改评测" in js_blob
+    assert "模型治理" in js_blob
+    assert "不能在这里切换销钉" in js_blob
