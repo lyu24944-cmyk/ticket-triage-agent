@@ -1,3 +1,23 @@
+export type FailureCase = {
+  id: string;
+  title: string;
+  when: string;
+  signal: string;
+  saw: string;
+  do: string;
+};
+
+export type FailureCasesStatus = {
+  readonly: boolean;
+  source: string;
+  ci: string;
+  measured: {
+    stub: string;
+    model: string;
+  };
+  cases: FailureCase[];
+};
+
 export type ModelGovernanceSignal = {
   code: string;
   label: string;

@@ -192,6 +192,8 @@ python -m mcp_server
 | 进程在运行中退出 | 下次启动从最后完成的节点继续。没有请求正文的旧记录才是 `failed` / `run_interrupted` |
 | 人审写状态失败 | HTTP 500，`internal_error`，响应里带 `trace_id` |
 
+评测抓住的三次失败（不该检索、传输中断退回 stub、注入句没有写成写状态）写在 [docs/FAILURE_CASES.md](docs/FAILURE_CASES.md)。审核台「故障案例」读 `GET /v1/failure-cases`，只展示已记录的数字，不重跑模型，也不改上面这张表的行为。
+
 ## 简历话术模板
 
 > 用工单分流 Agent 做白名单工具调用：模型自行决定是否检索知识库和工单历史，写状态必须经人工审核。40 条黄金集进入 CI，非法工具调用为 0，类别准确率 1.0，优先级准确率 1.0，引用精确率 1.0，不该引用时伪造率为 0。DeepSeek（deepseek-flash，`openai-act-v3`）上工具选择准确率 1.0，知识库没有的问题不再检索，也没有编造引用。
