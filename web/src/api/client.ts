@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   AuthModeResponse,
+  ModelGovernanceStatus,
   ClosedItem,
   MintTokenResponse,
   Page,
@@ -61,6 +62,10 @@ function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
 
 export function fetchAuthMode(): Promise<AuthModeResponse> {
   return request<AuthModeResponse>("/v1/auth/review/mode");
+}
+
+export function fetchModelGovernance(): Promise<ModelGovernanceStatus> {
+  return request<ModelGovernanceStatus>("/v1/governance/model");
 }
 
 export function mintToken(

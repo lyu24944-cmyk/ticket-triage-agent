@@ -132,7 +132,7 @@ uvicorn citation_rag.api.main:app --host 127.0.0.1 --port 8001
 1. **可恢复的任务**：已做，并且选定单实例。任务在 `run_jobs`，重启后从最后完成的节点继续。并发、队列和备份见 `docs/P5_RUNBOOK.md`。
 2. **值班信号**：已做一页纸说明 `docs/ONCALL.md`。日志固定键含 `alert_code` / `model_failed`（`ticket_triage.ops`）；`OPS_LOG_JSON` 进集中日志；`ALERT_WEBHOOK_URL` / SMTP 外发。`GET /health` 已有 `checks.queue`。不上完整 APM。CI 仍是 stub pytest + 黄金评测，不把这些日志当合并门槛。
 3. **客户数据**：已做。保留期限与可进提示词字段见 `docs/DATA.md`；送模型前脱敏在 `privacy.py`；审核人只在审核接口，不与 `SERVICE_API_KEY` 混用。
-4. **提示词可回滚**：已做。`PROMPT_PIN=current|previous`（v3/v2），见 `docs/PROMPTS.md`。本地可用 `evals/compare_prompt_versions.py` 对比；内测影子评测 `evals/run_shadow.py`（抽样真实单只打分不写状态，退回率信号可回滚）。CI 只跑 stub + 当前销钉，不打两次外网模型。
+4. **提示词可回滚**：已做。`PROMPT_PIN=current|previous`（v3/v2），见 `docs/PROMPTS.md`。本地可用 `evals/compare_prompt_versions.py` 对比；内测影子评测 `evals/run_shadow.py`（抽样真实单只打分不写状态，退回率信号可回滚）。CI 只跑 stub + 当前销钉，不打两次外网模型。审核台只读入口 `GET /v1/governance/model` 展示当前销钉和 `*_model_failed` 口径，不改评测、不含密钥。
 4b. **结案回调签名+重试**：已做。出站 `ticket.closed` 带 `X-Ticket-Triage-Signature` / `Delivery-Id`；失败入 runtime `closure_callbacks` 指数退避；耗尽告警 `closure_callback_failed`，不回滚结案。见 `docs/P3_INTEGRATION.md`。
 5. **审核 OIDC**：设 `REVIEW_OIDC_ISSUER` 后 mint 关闭，人审只接受 IdP Bearer（JWKS/RS256）；`sub` 口径不变。见 `docs/P1_IDENTITY.md`。
 
