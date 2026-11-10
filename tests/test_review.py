@@ -203,3 +203,12 @@ def test_pending_exposes_model_fallbacks(monkeypatch, service_headers, review_he
     assert "模型治理" in js_blob
     assert "不能在这里切换销钉" in js_blob
     assert "值班只读" in js_blob
+    assert "已受理未结束" in js_blob
+    queue_fn = Path(__file__).resolve().parents[1].joinpath("web/src/api/client.ts").read_text(encoding="utf-8")
+    start = queue_fn.index("export async function fetchQueueDepth")
+    stop = queue_fn.index("export function mintToken")
+    queue_fn = queue_fn[start:stop].lower()
+    assert "return { active, limit }" in queue_fn
+    assert "webhook" not in queue_fn
+    assert "api_key" not in queue_fn
+    assert "secret" not in queue_fn
