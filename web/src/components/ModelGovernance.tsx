@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchModelGovernance } from "../api/client";
 import type { ModelGovernanceStatus } from "../api/types";
 
-type Props = {
-  variant: "gate" | "desk" | "stage";
-};
-
-export function ModelGovernance({ variant }: Props) {
+export function ModelGovernance() {
   const [status, setStatus] = useState<ModelGovernanceStatus | null>(null);
   const [error, setError] = useState("");
 
@@ -31,8 +27,9 @@ export function ModelGovernance({ variant }: Props) {
         ? `${status.prompt_pin} · ${status.prompt_rev ?? ""} · ${status.prompt_version ?? ""}`
         : "销钉无法识别";
 
-  const body = (
+  return (
     <div className="gov-body">
+      <p className="gov-kicker">只读 · 不能在这里切换销钉</p>
       {status ? (
         <>
           <p className="gov-pinline">
@@ -59,26 +56,5 @@ export function ModelGovernance({ variant }: Props) {
         <p className="gov-note">{error || "正在读取模型治理状态。"}</p>
       )}
     </div>
-  );
-
-  if (variant === "desk") {
-    return (
-      <details className="gov gov-desk">
-        <summary>
-          模型治理
-          <span className="gov-summary-pin">{status ? pinLabel || "只读" : "只读"}</span>
-        </summary>
-        <p className="gov-kicker">只读 · 不能在这里切换销钉</p>
-        {body}
-      </details>
-    );
-  }
-
-  return (
-    <section className={`gov gov-${variant}`} aria-label="模型治理">
-      <h2>模型治理</h2>
-      <p className="gov-kicker">只读 · 不能在这里切换销钉</p>
-      {body}
-    </section>
   );
 }

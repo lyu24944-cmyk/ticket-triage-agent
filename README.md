@@ -117,7 +117,7 @@ $env:ANTHROPIC_API_KEY="..."    # openai 则设 OPENAI_API_KEY，可选 OPENAI_B
 python evals/run_evals.py
 ```
 
-不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。提示词用 `PROMPT_PIN=current|previous` 在 v3 / v2 间切换；对比两版见 [docs/PROMPTS.md](docs/PROMPTS.md)。CI 只跑当前销钉，不在流水线里打两次外网模型。审核台有一块只读的模型治理说明，数据来自 `GET /v1/governance/model`。
+不设模型时，同一条命令走 stub，这就是 CI 的门禁。评测会忽略 `RAG_BASE_URL`，固定用仓库里的 3 篇关键词文档。提示词用 `PROMPT_PIN=current|previous` 在 v3 / v2 间切换；对比两版见 [docs/PROMPTS.md](docs/PROMPTS.md)。CI 只跑当前销钉，不在流水线里打两次外网模型。审核台队列底部的「值班只读」默认收起，展开后的模型治理读 `GET /v1/governance/model`。
 
 配了 Langfuse 时，每次运行会多送一条 `ticket-triage` trace。版本号（例如 `openai-act-v3` 或 `stub-act-v1`）写在 trace 的 version 和 tag 上，延迟记成 `latency_ms`，有没有退回 stub 记成 `no_model_fallback`。黄金集还会把类别、优先级、引用和工具选择的得分贴到同一条 trace 上。不配 Key 时只保留原来的 SQLite 节点追踪。
 
@@ -192,7 +192,7 @@ python -m mcp_server
 | 进程在运行中退出 | 下次启动从最后完成的节点继续。没有请求正文的旧记录才是 `failed` / `run_interrupted` |
 | 人审写状态失败 | HTTP 500，`internal_error`，响应里带 `trace_id` |
 
-评测抓住的三次失败（不该检索、传输中断退回 stub、注入句没有写成写状态）写在 [docs/FAILURE_CASES.md](docs/FAILURE_CASES.md)。审核台「故障案例」读 `GET /v1/failure-cases`，只展示已记录的数字，不重跑模型，也不改上面这张表的行为。
+评测抓住的三次失败（不该检索、传输中断退回 stub、注入句没有写成写状态）写在 [docs/FAILURE_CASES.md](docs/FAILURE_CASES.md)。同一处「值班只读」里的故障案例读 `GET /v1/failure-cases`，只展示已记录的数字，不重跑模型，也不改上面这张表的行为。
 
 ## 简历话术模板
 

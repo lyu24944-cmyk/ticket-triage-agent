@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchFailureCases } from "../api/client";
 import type { FailureCasesStatus } from "../api/types";
 
-type Props = {
-  variant: "gate" | "desk" | "stage";
-};
-
-export function FailureCases({ variant }: Props) {
+export function FailureCases() {
   const [status, setStatus] = useState<FailureCasesStatus | null>(null);
   const [error, setError] = useState("");
 
@@ -24,8 +20,9 @@ export function FailureCases({ variant }: Props) {
     };
   }, []);
 
-  const body = (
+  return (
     <div className="cases-body">
+      <p className="cases-kicker">只读 · 不能在这里改评测</p>
       {status ? (
         <>
           <p className="cases-note">{status.ci}</p>
@@ -45,26 +42,5 @@ export function FailureCases({ variant }: Props) {
         <p className="cases-note">{error || "正在读取故障案例。"}</p>
       )}
     </div>
-  );
-
-  if (variant === "desk") {
-    return (
-      <details className="cases cases-desk">
-        <summary>
-          故障案例
-          <span className="cases-summary-pin">只读 · 三次评测失败</span>
-        </summary>
-        <p className="cases-kicker">只读 · 不能在这里改评测</p>
-        {body}
-      </details>
-    );
-  }
-
-  return (
-    <section className={`cases cases-${variant}`} aria-label="故障案例">
-      <h2>故障案例</h2>
-      <p className="cases-kicker">只读 · 不能在这里改评测</p>
-      {body}
-    </section>
   );
 }
