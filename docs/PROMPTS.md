@@ -55,6 +55,6 @@ python evals/run_shadow.py --sample 20 --compare
 | `act_model_failed` | 调度模型失败，已改走固定规则 |
 | `draft_model_failed` | 草稿模型失败，已退回 stub 草稿 |
 
-审核台登录页、未选工单的阅读区，以及队列底部的「模型治理」都读这一份。页面上不能改销钉。未知销钉或未列入名单的提供者不会回显原文。响应里没有 API Key、Base URL 或工单正文。
+审核台队列底部的「值班只读」默认收起。展开后，「模型治理」读这一份。页面上不能改销钉。未知销钉或未列入名单的提供者不会回显原文。响应里没有 API Key、Base URL 或工单正文。
 
 回滚仍是：把 `PROMPT_PIN` 设为 `previous`，只重启这一个 API 进程。CI 不调用这个入口做门禁，也不在流水线里对比两版外网模型。

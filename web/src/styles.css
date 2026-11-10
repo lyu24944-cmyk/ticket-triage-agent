@@ -1361,6 +1361,53 @@ textarea:disabled {
   }
 }
 
+.oncall-desk {
+  margin: 0 0 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.oncall-desk summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.oncall-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oncall-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.oncall-section h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.oncall-note {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+}
+
 .gov,
 .cases {
   font-size: 12px;

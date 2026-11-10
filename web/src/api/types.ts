@@ -1,3 +1,8 @@
+export type QueueDepth = {
+  active: number;
+  limit: number;
+};
+
 export type FailureCase = {
   id: string;
   title: string;

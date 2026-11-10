@@ -19,7 +19,7 @@ description: 选择下一件作品集改进，且不重做已完成的 P1–P7�
    路线图第 12 周：简历 bullet、架构图、故障案例。README 已有架构图、失败模式表和简历句。三次评测失败已写成 `docs/FAILURE_CASES.md`，审核台只读块读 `GET /v1/failure-cases`。简历句对的是 2026-10-25 的 `openai-act-v3` 记录。不要为了包装改架构图或评测门槛，不要重跑外网模型来刷新数字。
 
 2. **模型治理产品化**（已做只读这一层，不要重写评测）  
-   已有：`PROMPT_PIN=current|previous`、`evals/compare_prompt_versions.py`、`evals/run_shadow.py`（只打分、不写状态）、fallback 记 `classify_model_failed` / `act_model_failed` / `draft_model_failed`。只读入口已接到 `GET /v1/governance/model` 和审核台「模型治理」。CI 仍只跑 stub + 当前销钉，不把外网模型打进 `.github/workflows/evals.yml`。见 `docs/PROMPTS.md`。不要再加切换销钉的写接口。
+   已有：`PROMPT_PIN=current|previous`、`evals/compare_prompt_versions.py`、`evals/run_shadow.py`（只打分、不写状态）、fallback 记 `classify_model_failed` / `act_model_failed` / `draft_model_failed`。只读入口已接到 `GET /v1/governance/model`。和故障案例一起放在审核台队列底部的「值班只读」，默认收起，不要再拆回登录页和阅读区。CI 仍只跑 stub + 当前销钉，不把外网模型打进 `.github/workflows/evals.yml`。见 `docs/PROMPTS.md`。不要再加切换销钉的写接口。
 
 ## 明确非目标
 

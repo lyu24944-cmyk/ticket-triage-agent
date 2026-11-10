@@ -3,6 +3,7 @@ import type {
   AuthModeResponse,
   FailureCasesStatus,
   ModelGovernanceStatus,
+  QueueDepth,
   ClosedItem,
   MintTokenResponse,
   Page,
@@ -71,6 +72,19 @@ export function fetchFailureCases(): Promise<FailureCasesStatus> {
 
 export function fetchModelGovernance(): Promise<ModelGovernanceStatus> {
   return request<ModelGovernanceStatus>("/v1/governance/model");
+}
+
+export async function fetchQueueDepth(): Promise<QueueDepth> {
+  const response = await fetch("/health");
+  const body = (await parseJson(response)) as {
+    checks?: { queue?: { active?: unknown; limit?: unknown } };
+  };
+  const active = Number(body.checks?.queue?.active);
+  const limit = Number(body.checks?.queue?.limit);
+  if (!Number.isFinite(active) || !Number.isFinite(limit)) {
+    throw new ApiError(response.status || 503, "queue_unavailable", "队列深度暂时读不到。");
+  }
+  return { active, limit };
 }
 
 export function mintToken(
