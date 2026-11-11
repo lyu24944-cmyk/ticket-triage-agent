@@ -15,8 +15,8 @@ description: 选择下一件作品集改进，且不重做已完成的 P1–P7�
 
 ## 还值得做（先确认再动）
 
-1. **作品集包装**（故障案例只读入口已做，不要重做）  
-   路线图第 12 周：简历 bullet、架构图、故障案例。README 已有架构图、失败模式表和简历句。三次评测失败已写成 `docs/FAILURE_CASES.md`，审核台只读块读 `GET /v1/failure-cases`。简历句对的是 2026-10-25 的 `openai-act-v3` 记录。不要为了包装改架构图或评测门槛，不要重跑外网模型来刷新数字。
+1. **作品集包装**（结项材料已做，不要重做）  
+   案例在 `docs/CASE_STUDY.md`，这次 stub 数字在 `docs/EVAL_RESULTS.md`（2026-11-10，提交 `89e3dbf`）。简历句只用那一次实测。不要把旧的 DeepSeek 分数写回去，不要为了包装改业务代码、黄金集或评测门槛。
 
 2. **模型治理产品化**（已做只读这一层，不要重写评测）  
    已有：`PROMPT_PIN=current|previous`、`evals/compare_prompt_versions.py`、`evals/run_shadow.py`（只打分、不写状态）、fallback 记 `classify_model_failed` / `act_model_failed` / `draft_model_failed`。只读入口已接到 `GET /v1/governance/model`。和故障案例一起放在审核台队列底部的「值班只读」，默认收起，不要再拆回登录页和阅读区。CI 仍只跑 stub + 当前销钉，不把外网模型打进 `.github/workflows/evals.yml`。见 `docs/PROMPTS.md`。不要再加切换销钉的写接口。
@@ -34,5 +34,5 @@ description: 选择下一件作品集改进，且不重做已完成的 P1–P7�
 ## 怎么选
 
 - 用户的句子若对应第 4 节某一行「完成」，回复现状和文档路径，不要再实现一遍。
-- 没点名时，优先作品集包装。模型治理的只读入口已经做了，不要再加切换销钉的写接口，也不要把外网模型打进 CI。
+- 没点名时，不要再开运行时功能。作品集案例和这次 stub 实测已经写完。不要重做模型治理或故障案例，不要加切换销钉的写接口，也不要把外网模型打进 CI。
 - 代码改动仍要过 `.cursor/skills/verify-ticket-triage/SKILL.md`，并守住 `.cursor/skills/secure-ops/SKILL.md`。

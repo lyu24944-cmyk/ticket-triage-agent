@@ -1,6 +1,14 @@
 # 运行工单分流 API。进程以 appuser 启动，并且只开一个 worker。
 FROM python:3.12-slim
 
+# Debian 13.7 自带 zlib1g 1:1.3.dfsg+really1.3.1-1+b1。Trivy 报两条已有补丁的
+# HIGH：CVE-2026-76844、CVE-2026-85091（DSA-6613-1）。python:3.12-slim 还没带上
+# 这个安全更新，所以构建时安装 trixie-security 的固定版本。
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 COPY pyproject.toml README.md ./

@@ -1,6 +1,26 @@
 # 工单分流 Agent
 
-面向 AI Agent 工程师作品集的 LangGraph **工单分流**工作流：分类 → 白名单内自选工具 → 起草回复 → **人工审核（HITL）** → 结案/升级。
+面向 AI Agent 工程师求职和接单的样板：分类 → 白名单内自选工具 → 起草回复 → **人工审核（HITL）** → 结案或升级。案例写在 [docs/CASE_STUDY.md](docs/CASE_STUDY.md)，这次 stub 实测写在 [docs/EVAL_RESULTS.md](docs/EVAL_RESULTS.md)。
+
+## 作品集一页概览
+
+2026-11-10，被测提交 `89e3dbfeedd91894858e0baf2cde490ba485a138`，`LLM_PROVIDER=stub`，没有外网模型。
+
+- pytest：166 条收集，164 通过，0 失败，2 条 MCP integration 未跑。pytest 自报 37.72s。
+- 黄金集 40 条全部通过。类别、优先级、该引用时的引用、禁止引用时不伪造、工具选择都是 1.0。`illegal_tool_rate` 为 1.0，含义是 0 次非法调用。p95 为 25.81947399994533 ms。
+- 红队 5 条全部通过。
+
+简历句只使用上面这次运行的数字。
+
+> 中文：做了一个客服工单分流 Agent。分类之后只能在知识库检索、本单历史和结束之间选择，改状态必须等人审。2026-11-10 的 stub 实测：164 项测试通过（另有 2 项 MCP 集成测试未跑），40 条黄金集的类别、优先级、引用和工具选择都是 1.0，非法调用为 0，p95 25.81947399994533 ms；5 条红队用例通过。
+
+> English: Built a support-ticket triage agent that may only search the knowledge base, read the current ticket's history, or finish. Status changes wait for a person. On 2026-11-10, stub mode passed 164 tests (2 MCP integration tests not run), scored 1.0 on category, priority, citations, and tool choice across 40 golden cases with zero illegal tool calls, p95 25.81947399994533 ms, and passed 5/5 red-team cases.
+
+![待审退款单](docs/images/case-refund-pending.png)
+
+![问候单无引用](docs/images/case-greeting-other.png)
+
+![通过后结案](docs/images/case-refund-closed.png)
 
 - 锁定决策：见 [docs/DECISIONS.md](docs/DECISIONS.md)
 - 代理技能：见 [AGENTS.md](AGENTS.md)（`.cursor/skills/`）
@@ -194,9 +214,9 @@ python -m mcp_server
 
 评测抓住的三次失败（不该检索、传输中断退回 stub、注入句没有写成写状态）写在 [docs/FAILURE_CASES.md](docs/FAILURE_CASES.md)。同一处「值班只读」里的故障案例读 `GET /v1/failure-cases`，只展示已记录的数字，不重跑模型，也不改上面这张表的行为。
 
-## 简历话术模板
+## 简历话术
 
-> 用工单分流 Agent 做白名单工具调用：模型自行决定是否检索知识库和工单历史，写状态必须经人工审核。40 条黄金集进入 CI，非法工具调用为 0，类别准确率 1.0，优先级准确率 1.0，引用精确率 1.0，不该引用时伪造率为 0。DeepSeek（deepseek-flash，`openai-act-v3`）上工具选择准确率 1.0，知识库没有的问题不再检索，也没有编造引用。
+简历句放在上面的「作品集一页概览」，只用 2026-11-10 这次 stub 实测。`evals/` 没有可提交的历史模型报告，所以不再把以前的 DeepSeek 分数写进简历句。
 
 ## 目录结构
 
