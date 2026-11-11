@@ -57,6 +57,7 @@ def test_image_build_strips_pip_vendor_sbom_and_pins_floors() -> None:
     ignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
     assert "COPY deploy/check_runtime_image_deps.py" in dockerfile
     assert "check_runtime_image_deps.py --strip-pip" in dockerfile
+    assert "zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1" in dockerfile
     assert "urllib3>=2.8.0" in pyproject
     assert "setuptools>=78.1.1" in pyproject
     assert (ROOT / "deploy" / "check_runtime_image_deps.py").is_file()
